@@ -50,7 +50,7 @@ pub async fn graceful_hibernate<E: WslExecutor>(
 
 /// Runs `fstrim -av` inside the micro-distro to reclaim unused `.vhdx` blocks.
 pub async fn trim_distro<E: WslExecutor>(exec: &E, distro_name: &str) -> Result<String, WslError> {
-    let out = exec.run(&["-d", distro_name, "-e", "fstrim", "-av"]).await?;
+    let out = exec.run(&["-d", distro_name, "-e", "/sbin/fstrim", "-av"]).await?;
     if !out.success {
         return Err(WslError::CommandFailed {
             code: out.exit_code,
@@ -129,7 +129,7 @@ mod tests {
         let out = trim_distro(&mock, "nanodock").await.unwrap();
         assert!(out.contains("128 MiB"));
         let calls = mock.calls.lock().unwrap();
-        assert_eq!(calls[0], vec!["-d", "nanodock", "-e", "fstrim", "-av"]);
+        assert_eq!(calls[0], vec!["-d", "nanodock", "-e", "/sbin/fstrim", "-av"]);
     }
 
     #[tokio::test]

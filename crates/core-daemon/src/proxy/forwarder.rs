@@ -44,17 +44,53 @@ where
     }
     buf.truncate(n);
 
-    if let Some(rewritten) = try_rewrite_container_create(client, &mut buf).await? {
+    if let Some(rewritten) = prepare_initial_request(client, &mut buf).await? {
         upstream.write_all(&rewritten).await?;
     } else {
         upstream.write_all(&buf).await?;
     }
 
-    let _ = tokio::io::copy_bidirectional(client, &mut upstream).await;
+    bridge_streams(client, &mut upstream).await;
     Ok(())
 }
 
-async fn try_rewrite_container_create<S>(
+/// Bridges `client` (Windows Named Pipe) and `upstream` (`yamux::Stream`).
+///
+/// Windows Named Pipes do not support TCP-style half-close (`shutdown()`), so
+/// `tokio::io::copy_bidirectional` can deadlock waiting for `client` read EOF
+/// after `upstream` has already closed. When `upstream -> client` reaches EOF,
+/// flushing and dropping the pipe immediately unblocks `docker.exe`.
+async fn bridge_streams<C, U>(client: &mut C, upstream: &mut U)
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: AsyncRead + AsyncWrite + Unpin,
+{
+    let (mut cr, mut cw) = tokio::io::split(client);
+    let (mut ur, mut uw) = tokio::io::split(upstream);
+
+    let mut c2u = std::pin::pin!(async {
+        let res = tokio::io::copy(&mut cr, &mut uw).await;
+        let _ = uw.shutdown().await;
+        res
+    });
+    let mut u2c = std::pin::pin!(async {
+        let res = tokio::io::copy(&mut ur, &mut cw).await;
+        let _ = cw.flush().await;
+        res
+    });
+
+    tokio::select! {
+        _ = &mut u2c => {
+            // Upstream closed its write side; drop pipe so client sees EOF.
+        }
+        _ = &mut c2u => {
+            // Client finished writing; wait for upstream to finish responding.
+            let _ = u2c.await;
+        }
+    }
+}
+
+async fn prepare_initial_request<S>(
     client: &mut S,
     buf: &mut Vec<u8>,
 ) -> anyhow::Result<Option<Vec<u8>>>
@@ -76,48 +112,55 @@ where
     };
 
     let header_str = String::from_utf8_lossy(&buf[..header_end]).into_owned();
+    if is_upgrade_request(&header_str) {
+        return Ok(None);
+    }
+
     let first_line = header_str.lines().next().unwrap_or("");
-    if !is_container_create_request(first_line) {
-        return Ok(None);
-    }
+    if is_container_create_request(first_line) {
+        if let Some(content_len) = parse_content_length(&header_str) {
+            if content_len > 0 && content_len <= MAX_TRANSLATE_BODY_BYTES {
+                let total_needed = header_end + content_len;
+                while buf.len() < total_needed {
+                    let mut tmp = vec![0u8; (total_needed - buf.len()).min(16_384)];
+                    let n = client.read(&mut tmp).await?;
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&tmp[..n]);
+                }
 
-    let Some(content_len) = parse_content_length(&header_str) else {
-        return Ok(None);
-    };
-    if content_len == 0 || content_len > MAX_TRANSLATE_BODY_BYTES {
-        return Ok(None);
-    }
-
-    let total_needed = header_end + content_len;
-    while buf.len() < total_needed {
-        let mut tmp = vec![0u8; (total_needed - buf.len()).min(16_384)];
-        let n = client.read(&mut tmp).await?;
-        if n == 0 {
-            break;
+                if buf.len() >= total_needed {
+                    let body = &buf[header_end..total_needed];
+                    if let Some(new_body) = translate_container_create_json(body) {
+                        debug!(
+                            old_len = body.len(),
+                            new_len = new_body.len(),
+                            "Translated Windows bind-mount paths in /containers/create"
+                        );
+                        let updated_header = force_connection_close(&replace_content_length(
+                            &header_str,
+                            new_body.len(),
+                        ));
+                        let mut out = Vec::with_capacity(
+                            updated_header.len() + new_body.len() + (buf.len() - total_needed),
+                        );
+                        out.extend_from_slice(updated_header.as_bytes());
+                        out.extend_from_slice(&new_body);
+                        out.extend_from_slice(&buf[total_needed..]);
+                        return Ok(Some(out));
+                    }
+                }
+            }
         }
-        buf.extend_from_slice(&tmp[..n]);
     }
 
-    if buf.len() < total_needed {
-        return Ok(None);
-    }
-
-    let body = &buf[header_end..total_needed];
-    let Some(new_body) = translate_container_create_json(body) else {
-        return Ok(None);
-    };
-
-    debug!(
-        old_len = body.len(),
-        new_len = new_body.len(),
-        "Translated Windows bind-mount paths in /containers/create"
-    );
-
-    let updated_header = replace_content_length(&header_str, new_body.len());
-    let mut out = Vec::with_capacity(updated_header.len() + new_body.len() + (buf.len() - total_needed));
+    // Force Connection: close on non-upgrade requests so HTTP/1.1 Keep-Alive
+    // pooling cannot bypass /containers/create inspection on subsequent calls.
+    let updated_header = force_connection_close(&header_str);
+    let mut out = Vec::with_capacity(updated_header.len() + (buf.len() - header_end));
     out.extend_from_slice(updated_header.as_bytes());
-    out.extend_from_slice(&new_body);
-    out.extend_from_slice(&buf[total_needed..]);
+    out.extend_from_slice(&buf[header_end..]);
     Ok(Some(out))
 }
 
@@ -148,6 +191,49 @@ fn parse_content_length(header_str: &str) -> Option<usize> {
         }
     }
     None
+}
+
+fn is_upgrade_request(header_str: &str) -> bool {
+    for line in header_str.lines() {
+        if let Some((name, val)) = line.split_once(':') {
+            let name = name.trim();
+            if name.eq_ignore_ascii_case("upgrade") {
+                return true;
+            }
+            if name.eq_ignore_ascii_case("connection")
+                && val.to_ascii_lowercase().contains("upgrade")
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn force_connection_close(header_str: &str) -> String {
+    let mut out = String::with_capacity(header_str.len() + 20);
+    let mut replaced = false;
+    for line in header_str.split_inclusive("\r\n") {
+        if line == "\r\n" {
+            if !replaced {
+                out.push_str("Connection: close\r\n");
+                replaced = true;
+            }
+            out.push_str(line);
+            continue;
+        }
+        if let Some((name, _)) = line.split_once(':') {
+            if name.trim().eq_ignore_ascii_case("connection") {
+                if !replaced {
+                    out.push_str("Connection: close\r\n");
+                    replaced = true;
+                }
+                continue;
+            }
+        }
+        out.push_str(line);
+    }
+    out
 }
 
 fn replace_content_length(header_str: &str, new_len: usize) -> String {
@@ -198,14 +284,35 @@ mod tests {
         writer.write_all(&req.as_bytes()[20..]).await.unwrap();
         drop(writer);
 
-        let rewritten = try_rewrite_container_create(&mut client, &mut buf)
+        let rewritten = prepare_initial_request(&mut client, &mut buf)
             .await
             .unwrap()
             .expect("expected rewritten request");
         let text = String::from_utf8(rewritten).unwrap();
         assert!(text.contains("/mnt/c/work/app:/app:rw"));
+        assert!(text.contains("Connection: close\r\n"));
         let header_end = find_header_end(text.as_bytes()).unwrap();
         let new_len = parse_content_length(&text[..header_end]).unwrap();
         assert_eq!(new_len, text.len() - header_end);
+    }
+
+    #[tokio::test]
+    async fn forces_connection_close_on_non_upgrade_and_skips_upgrade() {
+        let ping = b"GET /_ping HTTP/1.1\r\nHost: docker\r\n\r\n";
+        let mut buf = ping.to_vec();
+        let (mut client, _writer) = tokio::io::duplex(64);
+        let rewritten = prepare_initial_request(&mut client, &mut buf)
+            .await
+            .unwrap()
+            .expect("expected Connection: close");
+        let text = String::from_utf8(rewritten).unwrap();
+        assert!(text.contains("Connection: close\r\n"));
+
+        let upgrade = b"POST /containers/abc/attach HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n";
+        let mut up_buf = upgrade.to_vec();
+        assert!(prepare_initial_request(&mut client, &mut up_buf)
+            .await
+            .unwrap()
+            .is_none());
     }
 }

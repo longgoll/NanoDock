@@ -9,6 +9,7 @@ COPY crates/shared-types crates/shared-types
 COPY crates/wsl-bridge crates/wsl-bridge
 COPY crates/core-daemon crates/core-daemon
 COPY crates/guest-agent crates/guest-agent
+COPY crates/nanodock-cli crates/nanodock-cli
 RUN cargo build --release --bin guest-agent
 
 # Stage 2: Minimal Alpine RootFS for WSL2
