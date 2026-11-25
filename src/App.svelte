@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getVersion } from "@tauri-apps/api/app";
   import { onMount } from "svelte";
   import ContainersView from "./features/containers/ContainersView.svelte";
   import DashboardView from "./features/dashboard/DashboardView.svelte";
@@ -15,6 +16,7 @@
   let activeTab = $state<Tab>("dashboard");
   let sidebarCollapsed = $state(false);
   let quickGuideOpen = $state(false);
+  let appVersion = $state<string | null>(null);
 
   const navItems = $derived<{ id: Tab; label: string; icon: IconName }[]>([
     { id: "dashboard", label: i18n.t.nav.dashboard, icon: "dashboard" },
@@ -28,6 +30,14 @@
   onMount(() => {
     engineStore.initTheme();
     sidebarCollapsed = localStorage.getItem("nanodock-sidebar-collapsed") === "true";
+
+    void getVersion()
+      .then((v) => {
+        appVersion = v;
+      })
+      .catch(() => {
+        appVersion = null;
+      });
 
     void engineStore.refreshAll(true);
 
@@ -80,14 +90,16 @@
   >
     <div>
       <div class={`mb-6 flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between px-2"}`}>
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2.5" title={appVersion ? `NanoDock v${appVersion}` : "NanoDock"}>
           <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-sm">
             <Icon name="logo" class="h-4 w-4" />
           </div>
           {#if !sidebarCollapsed}
             <div>
               <span class="block text-sm font-bold tracking-tight text-slate-900 dark:text-white">NanoDock</span>
-              <span class="block text-[10px] font-medium text-slate-400">WSL2 Engine</span>
+              <span class="block text-[10px] font-medium text-slate-400">
+                WSL2 Engine{#if appVersion} · v{appVersion}{/if}
+              </span>
             </div>
           {/if}
         </div>
