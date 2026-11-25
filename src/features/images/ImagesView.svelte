@@ -9,6 +9,7 @@
   import RunContainerModal from "../../lib/components/RunContainerModal.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
   import Tooltip from "../../lib/components/Tooltip.svelte";
+  import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import { formatBytes, formatTimestamp } from "../../lib/utils/format";
@@ -213,20 +214,20 @@
       onsubmit={handlePull}
       class="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs dark:border-slate-800 dark:bg-slate-900/50"
     >
-      <input
-        type="text"
-        bind:value={pullRef}
-        aria-label="Pull image reference"
-        placeholder="Pull image (e.g. nginx:alpine, postgres:16-alpine)"
-        class="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-      />
-      <button
-        type="submit"
-        disabled={engineStore.pullingRef !== null || !pullRef.trim()}
-        class="rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
-      >
-        {engineStore.pullingRef ? "Pulling..." : "Pull Image"}
-      </button>
+        <input
+          type="text"
+          bind:value={pullRef}
+          aria-label="Pull image reference"
+          placeholder={i18n.t.images.pullPlaceholder}
+          class="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+        />
+        <button
+          type="submit"
+          disabled={engineStore.pullingRef !== null || !pullRef.trim()}
+          class="rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
+        >
+          {engineStore.pullingRef ? i18n.t.images.pulling : i18n.t.images.pullImage}
+        </button>
     </form>
 
     <!-- Filter & Search Bar -->
@@ -385,7 +386,7 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="inline-flex items-center gap-1">
-                    <Tooltip text="Run container from this image">
+                    <Tooltip text={i18n.t.images.runTooltip}>
                       <button
                         type="button"
                         onclick={() => openRunModal(img)}
@@ -397,7 +398,7 @@
                       </button>
                     </Tooltip>
                     {#if img.in_use}
-                      <Tooltip text={`Cannot delete: used by ${img.used_by.join(", ")}`} align="right">
+                      <Tooltip text={i18n.t.images.lockedTooltip(img.used_by.join(", "))} align="right">
                         <button
                           type="button"
                           disabled
@@ -405,11 +406,11 @@
                           class="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-400 opacity-60 dark:border-slate-800 dark:text-slate-500"
                         >
                           <Icon name="lock" class="h-3.5 w-3.5" />
-                          In Use
+                          {i18n.t.common.inUse}
                         </button>
                       </Tooltip>
                     {:else}
-                      <Tooltip text="Delete unused image" align="right">
+                      <Tooltip text={i18n.t.images.deleteTooltip} align="right">
                         <button
                           type="button"
                           onclick={() => confirmDeleteSingle(img)}

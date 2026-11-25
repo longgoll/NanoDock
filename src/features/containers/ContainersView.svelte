@@ -12,6 +12,7 @@
   import RunContainerModal from "../../lib/components/RunContainerModal.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
   import Tooltip from "../../lib/components/Tooltip.svelte";
+  import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import ContainerDetailView, { type DetailTab } from "./ContainerDetailView.svelte";
@@ -313,16 +314,16 @@
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <div class="flex items-center gap-2">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Containers</h2>
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{i18n.t.containers.title}</h2>
         <HelpTip
-          title="Containers &amp; Bind Mounts"
+          title={i18n.t.containers.helpTitle}
           align="left"
           position="bottom"
-          text="Manage running and stopped containers. Windows bind paths (C:\\...) are automatically translated to /mnt/c/... inside WSL2."
+          text={i18n.t.containers.helpText}
         />
       </div>
       <p class="text-xs text-slate-500 dark:text-slate-400">
-        {runningCount} running · {stoppedCount} stopped · {totalCount} total
+        {i18n.t.containers.summary(runningCount, stoppedCount, totalCount)}
       </p>
     </div>
 
@@ -335,7 +336,7 @@
           class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
         >
           <Icon name="plus" class="h-3.5 w-3.5" />
-          Run Container
+          {i18n.t.containers.runContainer}
         </button>
 
         {#if runningCount > 0}
@@ -344,14 +345,14 @@
             onclick={stopAllRunning}
             disabled={engineStore.busy}
             class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25"
-            title="Stop all running containers"
+            title={i18n.t.containers.stopAll(runningCount)}
           >
             <Icon name="stop" class="h-3.5 w-3.5" />
-            Stop All ({runningCount})
+            {i18n.t.containers.stopAll(runningCount)}
           </button>
         {/if}
 
-        <Tooltip text="Group containers by Docker Compose project" position="bottom">
+        <Tooltip text={i18n.t.containers.groupByStackTooltip} position="bottom">
           <button
             type="button"
             onclick={() => (groupByStack = !groupByStack)}
@@ -362,7 +363,7 @@
             }`}
           >
             <Icon name="images" class="h-3.5 w-3.5" />
-            Group by Stack
+            {i18n.t.containers.groupByStack}
           </button>
         </Tooltip>
 
@@ -376,14 +377,14 @@
             name="refresh"
             class={`h-3.5 w-3.5 ${engineStore.loadingResources ? "animate-spin" : ""}`}
           />
-          Refresh
+          {i18n.t.common.refresh}
         </button>
       </div>
     {/if}
   </div>
 
   {#if engineStore.state === "stopped"}
-    <EngineSleepingCard resourceLabel="containers" />
+    <EngineSleepingCard resourceLabel={i18n.t.containers.resourceLabel} />
   {:else}
     <!-- Filter & Search Bar -->
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -397,7 +398,7 @@
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          All ({totalCount})
+          {i18n.t.common.all} ({totalCount})
         </button>
         <button
           type="button"
@@ -408,7 +409,7 @@
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          Running ({runningCount})
+          {i18n.t.containers.runningFilter(runningCount)}
         </button>
         <button
           type="button"
@@ -419,7 +420,7 @@
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          Stopped ({stoppedCount})
+          {i18n.t.containers.stoppedFilter(stoppedCount)}
         </button>
       </div>
 
@@ -430,18 +431,18 @@
             onclick={() => setAllGroupsCollapsed(false)}
             class="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
-            Expand all
+            {i18n.t.containers.expandAll}
           </button>
           <button
             type="button"
             onclick={() => setAllGroupsCollapsed(true)}
             class="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
-            Collapse all
+            {i18n.t.containers.collapseAll}
           </button>
         {/if}
 
-        <SearchInput bind:value={query} placeholder="Filter by name, image, stack..." />
+        <SearchInput bind:value={query} placeholder={i18n.t.containers.searchPlaceholder} />
       </div>
     </div>
 
@@ -728,7 +729,7 @@
     <td class="px-4 py-3 text-right">
       <div class="inline-flex items-center gap-0.5">
         {#if c.state === "running"}
-          <Tooltip text="Stop container">
+          <Tooltip text={i18n.t.containers.stopTooltip}>
             <button
               type="button"
               onclick={() => engineStore.runContainerAction(c.id, "stop")}
@@ -739,7 +740,7 @@
               <Icon name="stop" class="h-4 w-4" />
             </button>
           </Tooltip>
-          <Tooltip text="Restart container">
+          <Tooltip text={i18n.t.containers.restartTooltip}>
             <button
               type="button"
               onclick={() => engineStore.runContainerAction(c.id, "restart")}
@@ -750,7 +751,7 @@
               <Icon name="refresh" class="h-4 w-4" />
             </button>
           </Tooltip>
-          <Tooltip text="Open shell (exec)">
+          <Tooltip text={i18n.t.containers.shellTooltip}>
             <button
               type="button"
               onclick={() => openShell(c.id)}
@@ -761,7 +762,7 @@
             </button>
           </Tooltip>
         {:else}
-          <Tooltip text="Start container">
+          <Tooltip text={i18n.t.containers.startTooltip}>
             <button
               type="button"
               onclick={() => engineStore.runContainerAction(c.id, "start")}
@@ -773,7 +774,7 @@
             </button>
           </Tooltip>
         {/if}
-        <Tooltip text="View logs">
+        <Tooltip text={i18n.t.containers.logsTooltip}>
           <button
             type="button"
             onclick={() => openDetail(c.id, "logs")}
@@ -783,7 +784,7 @@
             <Icon name="logs" class="h-4 w-4" />
           </button>
         </Tooltip>
-        <Tooltip text="Inspect &amp; live stats">
+        <Tooltip text={i18n.t.containers.inspectTooltip}>
           <button
             type="button"
             onclick={() => openDetail(c.id, "inspect")}
@@ -793,7 +794,7 @@
             <Icon name="info" class="h-4 w-4" />
           </button>
         </Tooltip>
-        <Tooltip text="Delete container" align="right">
+        <Tooltip text={i18n.t.containers.deleteTooltip} align="right">
           <button
             type="button"
             onclick={() => confirmDeleteSingle(c)}

@@ -8,6 +8,7 @@
   import InUseBadge from "../../lib/components/InUseBadge.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
   import Tooltip from "../../lib/components/Tooltip.svelte";
+  import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import { formatIsoDate } from "../../lib/utils/format";
@@ -369,7 +370,7 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   {#if vol.in_use}
-                    <Tooltip text={`Cannot delete: mounted by ${vol.used_by.join(", ")}`} align="right">
+                    <Tooltip text={i18n.t.volumes.lockedTooltip(vol.used_by.join(", "))} align="right">
                       <button
                         type="button"
                         disabled
@@ -377,11 +378,11 @@
                         class="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-400 opacity-60 dark:border-slate-800 dark:text-slate-500"
                       >
                         <Icon name="lock" class="h-3.5 w-3.5" />
-                        In Use
+                        {i18n.t.common.inUse}
                       </button>
                     </Tooltip>
                   {:else}
-                    <Tooltip text="Delete unused volume (permanent)" align="right">
+                    <Tooltip text={i18n.t.volumes.deleteTooltip} align="right">
                       <button
                         type="button"
                         onclick={() => confirmDeleteSingle(vol)}

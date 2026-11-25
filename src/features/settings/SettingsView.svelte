@@ -3,6 +3,7 @@
   import { daemonApi, type EngineConfig } from "../../lib/api/daemon";
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
+  import { i18n, type LocalePreference } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
 
   const DEFAULT_CONFIG: EngineConfig = {
@@ -22,14 +23,14 @@
   let loading = $state(false);
   let draft = $state<EngineConfig>(cloneConfig(DEFAULT_CONFIG));
 
-  const idleOptions: { value: number | null; label: string }[] = [
-    { value: null, label: "Never (stay running)" },
-    { value: 180, label: "After 3 minutes (Default)" },
-    { value: 300, label: "After 5 minutes" },
-    { value: 900, label: "After 15 minutes" },
-    { value: 1800, label: "After 30 minutes" },
-    { value: 3600, label: "After 60 minutes" },
-  ];
+  const idleOptions = $derived<{ value: number | null; label: string }[]>([
+    { value: null, label: i18n.t.settings.idleNever },
+    { value: 180, label: i18n.t.settings.idle3m },
+    { value: 300, label: i18n.t.settings.idle5m },
+    { value: 900, label: i18n.t.settings.idle15m },
+    { value: 1800, label: i18n.t.settings.idle30m },
+    { value: 3600, label: i18n.t.settings.idle60m },
+  ]);
 
   const memoryPresets = [2048, 4096, 8192, 12288, 16384];
 
@@ -128,17 +129,17 @@
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900 dark:text-white">
-        Engine & WSL2 Settings
+        {i18n.t.settings.title}
       </h2>
       <p class="text-xs text-slate-500 dark:text-slate-400">
-        Configure memory limits, auto-hibernation, networking, and disk reclamation
+        {i18n.t.settings.subtitle}
       </p>
     </div>
 
     <div class="flex items-center gap-2">
       {#if isDirty}
         <span class="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300">
-          Unsaved changes
+          {i18n.t.settings.unsavedChanges}
         </span>
       {/if}
       <button
@@ -148,8 +149,39 @@
         class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
       >
         <Icon name="refresh" class={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-        Refresh
+        {i18n.t.common.refresh}
       </button>
+    </div>
+  </div>
+
+  <!-- Language Preference -->
+  <div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-900 dark:text-white">
+        {i18n.t.settings.languageTitle}
+      </h3>
+      <p class="text-xs text-slate-400">
+        {i18n.t.settings.languageDesc}
+      </p>
+    </div>
+    <div class="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-950">
+      {#each [
+        { id: "auto", label: i18n.t.settings.languageAuto(i18n.systemLocale === "vi" ? "Tiếng Việt" : "English") },
+        { id: "en", label: i18n.t.settings.languageEn },
+        { id: "vi", label: i18n.t.settings.languageVi },
+      ] as opt}
+        <button
+          type="button"
+          onclick={() => i18n.setPreference(opt.id as LocalePreference)}
+          class={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            i18n.preference === opt.id
+              ? "bg-sky-600 text-white shadow-xs"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          {opt.label}
+        </button>
+      {/each}
     </div>
   </div>
 
@@ -176,8 +208,8 @@
     <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
       <div class="flex items-center justify-between border-b border-slate-200 pb-4 dark:border-slate-800">
         <div>
-          <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Daemon & Automation</h3>
-          <p class="text-xs text-slate-400">Applied immediately without restarting WSL2</p>
+          <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{i18n.t.settings.daemonSection}</h3>
+          <p class="text-xs text-slate-400">{i18n.t.settings.daemonSectionDesc}</p>
         </div>
         <span class="rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
           {draft.distro_name}
@@ -190,16 +222,16 @@
             for="idle-timeout"
             class="block text-sm font-medium text-slate-700 dark:text-slate-300"
           >
-            Auto-Hibernate When Idle
+            {i18n.t.settings.idleLabel}
           </label>
           <HelpTip
-            title="Graceful Auto-Hibernate"
+            title={i18n.t.settings.idleLabel}
             align="left"
-            text="Sends SIGTERM to dockerd and containerd before shutting down WSL2, reaching 0 MB idle RAM without corrupting overlay2 layers."
+            text={i18n.t.settings.idleHelp}
           />
         </div>
         <p class="mt-0.5 text-xs text-slate-400">
-          Automatically shuts down the micro-distro to 0 MB RAM when no containers or streams are active
+          {i18n.t.settings.idleDesc}
         </p>
         <select
           id="idle-timeout"
@@ -212,7 +244,7 @@
           {/each}
           {#if hasCustomIdle && draft.idle_timeout_secs !== null}
             <option value={draft.idle_timeout_secs}>
-              After {draft.idle_timeout_secs} seconds (Custom)
+              {i18n.t.settings.idleCustom(draft.idle_timeout_secs)}
             </option>
           {/if}
         </select>
@@ -227,12 +259,9 @@
               disabled={!isConnected}
               class="h-4 w-4 accent-sky-600 disabled:opacity-60"
             />
-            Auto-run fstrim on container/image delete
+            {i18n.t.settings.autoTrimLabel}
           </label>
-          <HelpTip
-            text="Listens to Docker destroy/delete/prune events and runs fstrim after a 5s debounce so your .vhdx file stays compact automatically."
-            label="About auto-trim"
-          />
+          <HelpTip text={i18n.t.settings.autoTrimHelp} />
         </div>
 
         <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
@@ -242,7 +271,7 @@
             disabled={!isConnected}
             class="h-4 w-4 accent-sky-600 disabled:opacity-60"
           />
-          Start NanoDock daemon automatically on Windows login
+          {i18n.t.settings.autoStartLabel}
         </label>
       </div>
     </div>
@@ -250,8 +279,8 @@
     <!-- WSL2 VM Resources & Networking -->
     <div class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
       <div class="border-b border-slate-200 pb-4 dark:border-slate-800">
-        <h3 class="text-sm font-semibold text-slate-900 dark:text-white">WSL2 VM Resources & Networking</h3>
-        <p class="text-xs text-slate-400">Changes below require restarting the WSL2 engine</p>
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{i18n.t.settings.wslSection}</h3>
+        <p class="text-xs text-slate-400">{i18n.t.settings.wslSectionDesc}</p>
       </div>
 
       <div>
@@ -261,13 +290,9 @@
               for="ram-range"
               class="text-sm font-medium text-slate-700 dark:text-slate-300"
             >
-              WSL2 Memory Limit
+              {i18n.t.settings.memoryLabel}
             </label>
-            <HelpTip
-              align="left"
-              text="Maximum RAM the WSL2 VM is allowed to use. WSL2 allocates memory dynamically and returns unused RAM on hibernate."
-              label="About WSL2 memory limit"
-            />
+            <HelpTip align="left" text={i18n.t.settings.memoryHelp} />
           </div>
           <span class="font-mono text-sm font-semibold text-sky-700 dark:text-sky-400">
             {draft.wsl.memory_mb} MB ({formatGb(draft.wsl.memory_mb)})
@@ -304,12 +329,8 @@
       <div>
         <div class="flex justify-between text-sm font-medium text-slate-700 dark:text-slate-300">
           <div class="flex items-center gap-1.5">
-            <label for="swap-range">Swap (Anti-OOM)</label>
-            <HelpTip
-              align="left"
-              text="Disk-backed virtual memory used as a safety buffer if container workloads exceed the RAM limit."
-              label="About Swap"
-            />
+            <label for="swap-range">{i18n.t.settings.swapLabel}</label>
+            <HelpTip align="left" text={i18n.t.settings.swapHelp} />
           </div>
           <span class="font-mono font-semibold text-sky-700 dark:text-sky-400">
             {draft.wsl.swap_mb} MB ({formatGb(draft.wsl.swap_mb)})
@@ -336,12 +357,9 @@
               disabled={!isConnected}
               class="h-4 w-4 accent-sky-600 disabled:opacity-60"
             />
-            Enable sparse VHD (automatic disk shrinking)
+            {i18n.t.settings.sparseVhdLabel}
           </label>
-          <HelpTip
-            text="Enables sparse allocation on the WSL2 virtual disk so fstrim can return freed space to Windows."
-            label="About sparse VHD"
-          />
+          <HelpTip text={i18n.t.settings.sparseVhdHelp} />
         </div>
 
         <div class="flex items-center gap-2">
@@ -352,18 +370,15 @@
               disabled={!isConnected}
               class="h-4 w-4 accent-sky-600 disabled:opacity-60"
             />
-            Enable WSL2 mirrored networking mode
+            {i18n.t.settings.mirroredNetLabel}
           </label>
-          <HelpTip
-            text="Mirrors Windows network interfaces into WSL2 for cleaner localhost forwarding and VPN compatibility (requires Windows 11 22H2+)."
-            label="About mirrored networking"
-          />
+          <HelpTip text={i18n.t.settings.mirroredNetHelp} />
         </div>
       </div>
 
       {#if wslDirty && engineStore.state === "running"}
         <div class="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
-          WSL2 Memory, Swap, Sparse VHD, or Networking changed — restart the engine after saving to apply.
+          {i18n.t.settings.wslRestartNotice}
         </div>
       {/if}
     </div>
@@ -377,7 +392,7 @@
           disabled={!isConnected || !isDirty || saving || engineStore.busy}
           class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save Settings"}
+          {saving ? i18n.t.settings.saving : i18n.t.settings.saveSettings}
         </button>
         {#if wslDirty && engineStore.state === "running"}
           <button
@@ -386,7 +401,7 @@
             disabled={!isConnected || saving || engineStore.busy}
             class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
-            Save & Restart Engine
+            {i18n.t.settings.saveAndRestart}
           </button>
         {/if}
         {#if isDirty}
@@ -396,7 +411,7 @@
             disabled={saving}
             class="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           >
-            Reset
+            {i18n.t.settings.reset}
           </button>
         {/if}
       </div>
@@ -407,7 +422,7 @@
         disabled={!isConnected || isDefault || saving}
         class="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
       >
-        Restore Defaults
+        {i18n.t.settings.restoreDefaults}
       </button>
     </div>
   </div>

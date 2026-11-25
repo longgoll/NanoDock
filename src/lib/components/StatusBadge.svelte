@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EngineState } from "../api/daemon";
+  import { i18n } from "../i18n/index.svelte";
 
   let { state }: { state: EngineState } = $props();
 
@@ -16,18 +17,12 @@
       "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-400",
   };
 
-  const labels: Record<EngineState, string> = {
-    running: "Running",
-    stopped: "Sleeping (0 MB RAM)",
-    starting: "Waking up...",
-    stopping: "Hibernating...",
-    error: "Error",
-  };
+  const label = $derived(i18n.t.status[state]);
 </script>
 
 <span
   class={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${styles[state]}`}
 >
   <span class="h-2 w-2 rounded-full bg-current"></span>
-  {labels[state]}
+  {label}
 </span>

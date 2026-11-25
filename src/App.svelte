@@ -8,6 +8,7 @@
   import VolumesView from "./features/volumes/VolumesView.svelte";
   import Icon, { type IconName } from "./lib/components/Icon.svelte";
   import QuickGuideModal from "./lib/components/QuickGuideModal.svelte";
+  import { i18n } from "./lib/i18n/index.svelte";
   import { engineStore } from "./lib/stores/engine.svelte";
 
   type Tab = "dashboard" | "containers" | "images" | "volumes" | "storage" | "settings";
@@ -15,14 +16,14 @@
   let sidebarCollapsed = $state(false);
   let quickGuideOpen = $state(false);
 
-  const navItems: { id: Tab; label: string; icon: IconName }[] = [
-    { id: "dashboard", label: "Dashboard", icon: "dashboard" },
-    { id: "containers", label: "Containers", icon: "containers" },
-    { id: "images", label: "Images", icon: "images" },
-    { id: "volumes", label: "Volumes", icon: "volumes" },
-    { id: "storage", label: "Storage & Trim", icon: "storage" },
-    { id: "settings", label: "Settings", icon: "settings" },
-  ];
+  const navItems = $derived<{ id: Tab; label: string; icon: IconName }[]>([
+    { id: "dashboard", label: i18n.t.nav.dashboard, icon: "dashboard" },
+    { id: "containers", label: i18n.t.nav.containers, icon: "containers" },
+    { id: "images", label: i18n.t.nav.images, icon: "images" },
+    { id: "volumes", label: i18n.t.nav.volumes, icon: "volumes" },
+    { id: "storage", label: i18n.t.nav.storage, icon: "storage" },
+    { id: "settings", label: i18n.t.nav.settings, icon: "settings" },
+  ]);
 
   onMount(() => {
     engineStore.initTheme();
@@ -177,7 +178,7 @@
         </button>
       {:else}
         <div class="flex items-center justify-between px-3 py-1.5">
-          <span class="text-[11px] font-medium text-slate-400">Engine</span>
+          <span class="text-[11px] font-medium text-slate-400">{i18n.t.nav.engine}</span>
           <span
             class={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${
               engineStore.state === "running"
@@ -189,14 +190,14 @@
           >
             <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
             {engineStore.state === "running"
-              ? "Running"
+              ? i18n.t.nav.running
               : engineStore.state === "stopped"
-                ? "Sleeping"
+                ? i18n.t.nav.sleeping
                 : engineStore.state}
           </span>
         </div>
         <div class="flex items-center justify-between px-3 py-1">
-          <span class="text-[11px] font-medium text-slate-400">Auto-sync (5s)</span>
+          <span class="text-[11px] font-medium text-slate-400">{i18n.t.nav.autoSync}</span>
           <button
             type="button"
             onclick={() => engineStore.toggleAutoRefresh()}
@@ -216,7 +217,7 @@
             onclick={() => engineStore.toggleTheme()}
             class="flex flex-1 items-center justify-between rounded-lg px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           >
-            <span>{engineStore.theme === "light" ? "Light Mode" : "Dark Mode"}</span>
+            <span>{engineStore.theme === "light" ? i18n.t.nav.lightMode : i18n.t.nav.darkMode}</span>
             <Icon
               name={engineStore.theme === "light" ? "sun" : "moon"}
               class={`h-4 w-4 ${engineStore.theme === "light" ? "text-amber-500" : "text-sky-400"}`}
@@ -225,8 +226,8 @@
           <button
             type="button"
             onclick={() => (quickGuideOpen = true)}
-            title="Quick Guide"
-            aria-label="Open Quick Guide"
+            title={i18n.t.nav.quickGuide}
+            aria-label={i18n.t.nav.quickGuide}
             class="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-sky-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-sky-400"
           >
             <Icon name="help" class="h-4 w-4" />

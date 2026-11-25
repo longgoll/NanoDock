@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { i18n } from "../i18n/index.svelte";
   import { engineStore } from "../stores/engine.svelte";
   import Icon from "./Icon.svelte";
 
@@ -10,10 +11,10 @@
     <Icon name="moon" class="h-6 w-6" />
   </div>
   <h3 class="mt-4 text-base font-semibold text-slate-900 dark:text-white">
-    Engine is Sleeping (0 MB RAM)
+    {i18n.t.sleepingCard.title}
   </h3>
   <p class="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-    NanoDock hibernates the WSL2 micro-distro when idle to save memory. Wake up the engine to view and manage {resourceLabel}.
+    {i18n.t.sleepingCard.description(resourceLabel)}
   </p>
   <button
     type="button"
@@ -22,6 +23,6 @@
     class="mt-5 inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
   >
     <Icon name="play" class="h-4 w-4" />
-    {engineStore.busy ? "Waking up..." : "Wake Up Engine"}
+    {engineStore.busy ? i18n.t.sleepingCard.wakingUp : i18n.t.sleepingCard.wakeUp}
   </button>
 </div>
