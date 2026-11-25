@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -6,13 +7,17 @@ use tokio::sync::{broadcast, RwLock};
 use tokio_util::sync::CancellationToken;
 use wsl_bridge::WslExecutor;
 
+use crate::startup::{NoopStartup, StartupManager};
 use crate::transport::TransportManager;
 
 /// Shared runtime state and coordination primitives for `core-daemon`.
 pub struct AppContext<E: WslExecutor> {
     pub config: RwLock<EngineConfig>,
+    pub config_path: PathBuf,
+    pub wslconfig_path: Option<PathBuf>,
     pub state: RwLock<EngineState>,
     pub wsl: Arc<E>,
+    pub startup: Arc<dyn StartupManager>,
     pub transport: Arc<TransportManager<E>>,
     pub active_streams: Arc<AtomicUsize>,
     pub shutdown: CancellationToken,
@@ -20,7 +25,20 @@ pub struct AppContext<E: WslExecutor> {
 }
 
 impl<E: WslExecutor> AppContext<E> {
+    #[allow(dead_code)]
     pub fn new(config: EngineConfig, wsl: Arc<E>) -> Arc<Self> {
+        let test_cfg =
+            std::env::temp_dir().join(format!("nanodock-test-{}.json", std::process::id()));
+        Self::with_dependencies(config, test_cfg, None, wsl, Arc::new(NoopStartup))
+    }
+
+    pub fn with_dependencies(
+        config: EngineConfig,
+        config_path: PathBuf,
+        wslconfig_path: Option<PathBuf>,
+        wsl: Arc<E>,
+        startup: Arc<dyn StartupManager>,
+    ) -> Arc<Self> {
         let transport = Arc::new(TransportManager::new(
             Arc::clone(&wsl),
             config.distro_name.clone(),
@@ -28,8 +46,11 @@ impl<E: WslExecutor> AppContext<E> {
         let (events, _) = broadcast::channel(64);
         Arc::new(Self {
             config: RwLock::new(config),
+            config_path,
+            wslconfig_path,
             state: RwLock::new(EngineState::Stopped),
             wsl,
+            startup,
             transport,
             active_streams: Arc::new(AtomicUsize::new(0)),
             shutdown: CancellationToken::new(),

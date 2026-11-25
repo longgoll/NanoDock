@@ -1,19 +1,21 @@
 mod app_context;
+mod config_store;
 mod control_rpc;
 mod lifecycle;
 mod pipe_server;
 mod proxy;
+mod startup;
 mod transport;
 mod watchers;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use shared_types::EngineConfig;
 use tracing::{error, info, warn};
-use wsl_bridge::{ensure_distro_imported, BootstrapOutcome, SystemWslExecutor};
+use wsl_bridge::{ensure_distro_imported, ensure_wslconfig, BootstrapOutcome, SystemWslExecutor};
 
 use crate::app_context::AppContext;
+use crate::startup::WindowsRegistryStartup;
 use crate::watchers::{DiskReclaimHook, DockerEventHook};
 
 #[tokio::main]
@@ -25,9 +27,14 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let config = EngineConfig::default();
+    let config_path = config_store::default_config_path();
+    let wslconfig_path = config_store::wslconfig_path();
+    let config = config_store::load_or_default(&config_path);
+    sync_wslconfig_on_startup(&config, wslconfig_path.as_deref());
+
     let wsl = Arc::new(SystemWslExecutor);
-    let ctx = AppContext::new(config, wsl);
+    let startup = Arc::new(WindowsRegistryStartup);
+    let ctx = AppContext::with_dependencies(config, config_path, wslconfig_path, wsl, startup);
 
     auto_bootstrap_distro(&ctx).await;
 
@@ -52,6 +59,18 @@ async fn main() -> anyhow::Result<()> {
     let _ = events_task.await;
 
     Ok(())
+}
+
+fn sync_wslconfig_on_startup(
+    config: &shared_types::EngineConfig,
+    wslconfig_path: Option<&std::path::Path>,
+) {
+    if let Some(wsl_cfg_path) = wslconfig_path {
+        let supports_win11 = config_store::supports_win11_wsl2_features();
+        if let Err(err) = ensure_wslconfig(wsl_cfg_path, &config.wsl, supports_win11) {
+            warn!(error = %err, path = %wsl_cfg_path.display(), "Failed to sync .wslconfig on startup");
+        }
+    }
 }
 
 async fn auto_bootstrap_distro(ctx: &AppContext<SystemWslExecutor>) {

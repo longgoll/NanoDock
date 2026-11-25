@@ -104,6 +104,7 @@ pub enum ControlRequest {
     GetStatus,
     StartEngine,
     StopEngine,
+    ShutdownDaemon,
     TrimDisk,
     GetConfig,
     UpdateConfig(EngineConfig),

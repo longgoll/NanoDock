@@ -6,9 +6,10 @@ use shared_types::{ControlRequest, ControlResponse, EngineState};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tracing::{error, info, warn};
-use wsl_bridge::{graceful_hibernate, trim_distro, wake_distro, WslExecutor};
+use wsl_bridge::{ensure_wslconfig, graceful_hibernate, trim_distro, wake_distro, WslExecutor};
 
 use crate::app_context::AppContext;
+use crate::config_store;
 use crate::lifecycle::docker_api;
 
 pub const CONTROL_PIPE_NAME: &str = r"\\.\pipe\nanodock_ctl";
@@ -133,6 +134,21 @@ async fn dispatch_request<E: WslExecutor>(
                 },
             }
         }
+        ControlRequest::ShutdownDaemon => {
+            let current_state = *ctx.state.read().await;
+            if current_state != EngineState::Stopped {
+                let distro = ctx.config.read().await.distro_name.clone();
+                ctx.set_state(EngineState::Stopping).await;
+                ctx.transport.close_transport().await;
+                if let Err(err) = graceful_hibernate(ctx.wsl.as_ref(), &distro).await {
+                    warn!(error = %err, "Failed to gracefully hibernate during daemon shutdown");
+                }
+                ctx.set_state(EngineState::Stopped).await;
+            }
+            info!("Graceful daemon shutdown requested via Control RPC");
+            ctx.shutdown.cancel();
+            ControlResponse::Ack
+        }
         ControlRequest::TrimDisk => {
             let distro = ctx.config.read().await.distro_name.clone();
             match trim_distro(ctx.wsl.as_ref(), &distro).await {
@@ -144,6 +160,24 @@ async fn dispatch_request<E: WslExecutor>(
         }
         ControlRequest::GetConfig => ControlResponse::Config(ctx.config.read().await.clone()),
         ControlRequest::UpdateConfig(next) => {
+            if let Err(err) = config_store::save_config(&ctx.config_path, &next) {
+                return ControlResponse::Error {
+                    message: format!("failed to persist config: {err}"),
+                };
+            }
+            if let Some(wsl_cfg_path) = ctx.wslconfig_path.as_deref() {
+                let supports_win11 = config_store::supports_win11_wsl2_features();
+                if let Err(err) = ensure_wslconfig(wsl_cfg_path, &next.wsl, supports_win11) {
+                    return ControlResponse::Error {
+                        message: format!("failed to update .wslconfig: {err}"),
+                    };
+                }
+            }
+            if let Err(err) = ctx.startup.set_enabled(next.auto_start_on_login) {
+                return ControlResponse::Error {
+                    message: format!("failed to update startup setting: {err}"),
+                };
+            }
             *ctx.config.write().await = next;
             ControlResponse::Ack
         }
@@ -363,6 +397,17 @@ mod tests {
             dispatch_request(ControlRequest::TrimDisk, &ctx).await,
             ControlResponse::Ack
         ));
+    }
+
+    #[tokio::test]
+    async fn dispatch_shutdown_daemon_cancels_token() {
+        let ctx = AppContext::new(EngineConfig::default(), Arc::new(MockWsl::new(vec![])));
+        assert!(!ctx.shutdown.is_cancelled());
+        assert!(matches!(
+            dispatch_request(ControlRequest::ShutdownDaemon, &ctx).await,
+            ControlResponse::Ack
+        ));
+        assert!(ctx.shutdown.is_cancelled());
     }
 
     #[tokio::test]

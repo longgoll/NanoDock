@@ -95,8 +95,30 @@ pub fn run() {
             if let Some(state) = app_handle.try_state::<Arc<DaemonChild>>() {
                 if let Ok(mut guard) = state.0.lock() {
                     if let Some(mut child) = guard.take() {
-                        let _ = child.kill();
-                        let _ = child.wait();
+                        let _ = tauri::async_runtime::block_on(async {
+                            tokio::time::timeout(
+                                std::time::Duration::from_secs(8),
+                                daemon_client::send_control_request(
+                                    shared_types::ControlRequest::ShutdownDaemon,
+                                ),
+                            )
+                            .await
+                        });
+                        let deadline =
+                            std::time::Instant::now() + std::time::Duration::from_secs(2);
+                        loop {
+                            match child.try_wait() {
+                                Ok(Some(_)) => break,
+                                Ok(None) if std::time::Instant::now() < deadline => {
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                }
+                                _ => {
+                                    let _ = child.kill();
+                                    let _ = child.wait();
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }

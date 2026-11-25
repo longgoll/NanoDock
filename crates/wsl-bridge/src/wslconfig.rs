@@ -58,6 +58,8 @@ pub fn merge_wslconfig_content(
         if spec.mirrored_networking {
             upsert_key(wsl2_entries, "networkingMode", "mirrored");
             upsert_key(wsl2_entries, "dnsTunneling", "true");
+        } else {
+            upsert_key(wsl2_entries, "networkingMode", "nat");
         }
     }
 
