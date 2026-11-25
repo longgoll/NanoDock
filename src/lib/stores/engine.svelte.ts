@@ -22,6 +22,7 @@ class EngineStore {
   images = $state<ImageSummary[]>([]);
   volumes = $state<VolumeSummary[]>([]);
   busy = $state<boolean>(false);
+  pendingKeys = $state<Set<string>>(new Set());
   loadingResources = $state<boolean>(false);
   autoRefresh = $state<boolean>(true);
   pullingRef = $state<string | null>(null);
@@ -128,7 +129,34 @@ class EngineStore {
     }
   }
 
+  isPending(key: string): boolean {
+    return this.pendingKeys.has(key);
+  }
+
+  isPrefixPending(prefix: string): boolean {
+    for (const k of this.pendingKeys) {
+      if (k.startsWith(prefix)) return true;
+    }
+    return false;
+  }
+
+  private async withPending<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const next = new Set(this.pendingKeys);
+    next.add(key);
+    this.pendingKeys = next;
+    this.busy = true;
+    try {
+      return await fn();
+    } finally {
+      const after = new Set(this.pendingKeys);
+      after.delete(key);
+      this.pendingKeys = after;
+      this.busy = after.size > 0;
+    }
+  }
+
   private async runBatch<T>(
+    key: string,
     items: T[],
     fn: (item: T) => Promise<ControlResponse>,
     afterRefresh: () => Promise<unknown>,
@@ -136,13 +164,12 @@ class EngineStore {
     errorPrefix: (succeeded: number, total: number, firstError: string) => string,
   ) {
     if (items.length === 0) return;
-    this.busy = true;
-    this.setNotice(null);
-    this.error = null;
-    let succeeded = 0;
-    const errors: string[] = [];
+    await this.withPending(key, async () => {
+      this.setNotice(null);
+      this.error = null;
+      let succeeded = 0;
+      const errors: string[] = [];
 
-    try {
       const results = await Promise.allSettled(items.map((item) => fn(item)));
       for (const res of results) {
         if (res.status === "fulfilled") {
@@ -163,9 +190,7 @@ class EngineStore {
       } else {
         this.setNotice(successMsg(succeeded));
       }
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async refreshContainers(silent = false) {
@@ -188,20 +213,20 @@ class EngineStore {
   }
 
   async runContainerAction(id: string, action: ContainerActionKind) {
-    this.busy = true;
-    try {
-      const resp = await daemonApi.containerAction(id, action);
-      if (!this.handleError(resp)) {
-        await Promise.all([this.refreshContainers(), this.refresh()]);
+    await this.withPending(`container:${id}:${action}`, async () => {
+      try {
+        const resp = await daemonApi.containerAction(id, action);
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.containerActionDone(action));
+          await Promise.all([this.refreshContainers(true), this.refresh()]);
+        }
+      } catch (e) {
+        this.error = String(e);
       }
-    } catch (e) {
-      this.error = String(e);
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
-  async runContainersBatch(ids: string[], action: ContainerActionKind) {
+  async runContainersBatch(ids: string[], action: ContainerActionKind, scopeKey = "containers:batch") {
     const verb: Record<ContainerActionKind, string> = {
       start: "Started",
       stop: "Stopped",
@@ -209,9 +234,10 @@ class EngineStore {
       remove: "Deleted",
     };
     await this.runBatch(
+      `${scopeKey}:${action}`,
       ids,
       (id) => daemonApi.containerAction(id, action),
-      () => Promise.all([this.refreshContainers(), this.refresh()]),
+      () => Promise.all([this.refreshContainers(true), this.refresh()]),
       (n) => `${verb[action]} ${n} container${n === 1 ? "" : "s"}.`,
       (n, total, err) => `${n}/${total} succeeded. Error: ${err}`,
     );
@@ -256,67 +282,65 @@ class EngineStore {
   }
 
   async runContainer(spec: RunContainerSpec): Promise<boolean> {
-    this.busy = true;
-    this.setNotice(null);
-    try {
-      const resp = await daemonApi.runContainer(spec);
-      if (resp.status === "container_created") {
-        this.setNotice(i18n.t.notices.startedContainer(resp.data.id, spec.image));
-        await Promise.all([this.refreshContainers(true), this.refreshImages(true), this.refresh()]);
-        return true;
+    return this.withPending("container:run", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.runContainer(spec);
+        if (resp.status === "container_created") {
+          this.setNotice(i18n.t.notices.startedContainer(resp.data.id, spec.image));
+          await Promise.all([this.refreshContainers(true), this.refreshImages(true), this.refresh()]);
+          return true;
+        }
+        this.handleError(resp);
+        return false;
+      } catch (e) {
+        this.error = String(e);
+        return false;
       }
-      this.handleError(resp);
-      return false;
-    } catch (e) {
-      this.error = String(e);
-      return false;
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async removeImage(id: string) {
-    this.busy = true;
-    try {
-      const resp = await daemonApi.removeImage(id);
-      if (!this.handleError(resp)) {
-        this.setNotice(i18n.t.notices.imageDeleted);
-        await this.refreshImages();
+    await this.withPending(`image:${id}:remove`, async () => {
+      try {
+        const resp = await daemonApi.removeImage(id);
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.imageDeleted);
+          await this.refreshImages(true);
+        }
+      } catch (e) {
+        this.error = String(e);
       }
-    } catch (e) {
-      this.error = String(e);
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async removeImagesBatch(ids: string[]) {
     await this.runBatch(
+      "images:batch:remove",
       ids,
       (id) => daemonApi.removeImage(id),
-      () => this.refreshImages(),
+      () => this.refreshImages(true),
       (n) => i18n.t.notices.imagesDeletedBatch(n),
       (n, total, err) => i18n.t.notices.imagesDeletedBatchError(n, total, err),
     );
   }
 
   async pruneImages() {
-    this.busy = true;
-    this.setNotice(null);
-    try {
-      const resp = await daemonApi.pruneImages();
-      if (resp.status === "prune_result") {
-        const mb = (resp.data.reclaimed_bytes / (1024 * 1024)).toFixed(1);
-        this.setNotice(i18n.t.notices.imagesPruned(mb));
-        await this.refreshImages();
-      } else {
-        this.handleError(resp);
+    await this.withPending("images:prune", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.pruneImages();
+        if (resp.status === "prune_result") {
+          const mb = (resp.data.reclaimed_bytes / (1024 * 1024)).toFixed(1);
+          this.setNotice(i18n.t.notices.imagesPruned(mb));
+          await this.refreshImages(true);
+        } else {
+          this.handleError(resp);
+        }
+      } catch (e) {
+        this.error = String(e);
       }
-    } catch (e) {
-      this.error = String(e);
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async refreshVolumes(silent = false) {
@@ -338,84 +362,82 @@ class EngineStore {
   }
 
   async createVolume(name: string, driver?: string): Promise<boolean> {
-    this.busy = true;
-    this.setNotice(null);
-    try {
-      const resp = await daemonApi.createVolume(name, driver);
-      if (!this.handleError(resp)) {
-        this.setNotice(i18n.t.notices.volumeCreated(name));
-        await this.refreshVolumes();
-        return true;
+    return this.withPending("volumes:create", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.createVolume(name, driver);
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.volumeCreated(name));
+          await this.refreshVolumes(true);
+          return true;
+        }
+        return false;
+      } catch (e) {
+        this.error = String(e);
+        return false;
       }
-      return false;
-    } catch (e) {
-      this.error = String(e);
-      return false;
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async removeVolume(name: string) {
-    this.busy = true;
-    try {
-      const resp = await daemonApi.removeVolume(name);
-      if (!this.handleError(resp)) {
-        this.setNotice(i18n.t.notices.volumeDeleted(name));
-        await this.refreshVolumes();
+    await this.withPending(`volume:${name}:remove`, async () => {
+      try {
+        const resp = await daemonApi.removeVolume(name);
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.volumeDeleted(name));
+          await this.refreshVolumes(true);
+        }
+      } catch (e) {
+        this.error = String(e);
       }
-    } catch (e) {
-      this.error = String(e);
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async removeVolumesBatch(names: string[]) {
     await this.runBatch(
+      "volumes:batch:remove",
       names,
       (name) => daemonApi.removeVolume(name),
-      () => this.refreshVolumes(),
+      () => this.refreshVolumes(true),
       (n) => i18n.t.notices.volumesDeletedBatch(n),
       (n, total, err) => i18n.t.notices.volumesDeletedBatchError(n, total, err),
     );
   }
 
   async pruneVolumes() {
-    this.busy = true;
-    this.setNotice(null);
-    try {
-      const resp = await daemonApi.pruneVolumes();
-      if (resp.status === "prune_result") {
-        const mb = (resp.data.reclaimed_bytes / (1024 * 1024)).toFixed(1);
-        this.setNotice(i18n.t.notices.volumesPruned(mb));
-        await this.refreshVolumes();
-      } else {
-        this.handleError(resp);
+    await this.withPending("volumes:prune", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.pruneVolumes();
+        if (resp.status === "prune_result") {
+          const mb = (resp.data.reclaimed_bytes / (1024 * 1024)).toFixed(1);
+          this.setNotice(i18n.t.notices.volumesPruned(mb));
+          await this.refreshVolumes(true);
+        } else {
+          this.handleError(resp);
+        }
+      } catch (e) {
+        this.error = String(e);
       }
-    } catch (e) {
-      this.error = String(e);
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async start() {
-    this.busy = true;
-    try {
+    await this.withPending("engine:start", async () => {
       const resp = await daemonApi.startEngine();
-      this.handleError(resp);
+      if (!this.handleError(resp)) {
+        this.setNotice(i18n.t.notices.engineStarted);
+      }
       await this.refreshAll(true);
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async stop() {
-    this.busy = true;
-    try {
+    await this.withPending("engine:stop", async () => {
       const resp = await daemonApi.stopEngine();
-      this.handleError(resp);
+      if (!this.handleError(resp)) {
+        this.setNotice(i18n.t.notices.engineStopped);
+      }
       await this.refresh();
       if (this.state === "stopped") {
         this.containers = [];
@@ -423,23 +445,22 @@ class EngineStore {
         this.volumes = [];
         this.runningContainers = 0;
       }
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 
   async trim() {
-    this.busy = true;
-    this.setNotice(null);
-    try {
-      const resp = await daemonApi.trimDisk();
-      if (!this.handleError(resp)) {
-        this.setNotice(i18n.t.notices.diskTrimmed);
+    await this.withPending("engine:trim", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.trimDisk();
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.diskTrimmed);
+        }
+        await this.refresh();
+      } catch (e) {
+        this.error = String(e);
       }
-      await this.refresh();
-    } finally {
-      this.busy = false;
-    }
+    });
   }
 }
 

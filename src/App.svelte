@@ -241,7 +241,15 @@
     </div>
   </aside>
 
-  <main class="flex-1 overflow-y-auto p-7">
+  <main class="relative flex-1 overflow-y-auto p-7">
+    {#if engineStore.busy || engineStore.pullingRef || engineStore.loadingResources}
+      <div
+        aria-hidden="true"
+        class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-sky-500/15"
+      >
+        <div class="h-full w-1/3 animate-pulse bg-sky-500"></div>
+      </div>
+    {/if}
     {#if activeTab === "dashboard"}
       <DashboardView onNavigate={(tab) => (activeTab = tab)} />
     {:else if activeTab === "containers"}
@@ -263,9 +271,12 @@
       {#if engineStore.error}
         <div
           role="alert"
-          class="flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-white/95 px-4 py-3 text-xs text-rose-700 shadow-lg backdrop-blur-xs dark:border-rose-500/30 dark:bg-slate-900/95 dark:text-rose-300"
+          class="animate-toast-in flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-white/95 px-4 py-3 text-xs text-rose-700 shadow-lg backdrop-blur-xs dark:border-rose-500/30 dark:bg-slate-900/95 dark:text-rose-300"
         >
-          <span class="leading-relaxed">{engineStore.error}</span>
+          <div class="flex items-start gap-2">
+            <Icon name="warning" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
+            <span class="leading-relaxed">{engineStore.error}</span>
+          </div>
           <button
             type="button"
             onclick={() => (engineStore.error = null)}
@@ -280,9 +291,12 @@
       {#if engineStore.notice}
         <div
           role="status"
-          class="flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-white/95 px-4 py-3 text-xs text-emerald-700 shadow-lg backdrop-blur-xs dark:border-emerald-500/30 dark:bg-slate-900/95 dark:text-emerald-300"
+          class="animate-toast-in flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-white/95 px-4 py-3 text-xs text-emerald-700 shadow-lg backdrop-blur-xs dark:border-emerald-500/30 dark:bg-slate-900/95 dark:text-emerald-300"
         >
-          <span class="leading-relaxed">{engineStore.notice}</span>
+          <div class="flex items-start gap-2">
+            <Icon name="check" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+            <span class="leading-relaxed">{engineStore.notice}</span>
+          </div>
           <button
             type="button"
             onclick={() => engineStore.setNotice(null)}

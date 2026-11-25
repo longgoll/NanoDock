@@ -1,6 +1,8 @@
 export const en = {
   common: {
     refresh: "Refresh",
+    refreshing: "Refreshing...",
+    refreshed: "Refreshed",
     cancel: "Cancel",
     delete: "Delete",
     deleteSelected: "Delete Selected",
@@ -13,6 +15,7 @@ export const en = {
     stop: "Stop",
     restart: "Restart",
     moreInfo: "More info",
+    working: "Working...",
   },
   nav: {
     dashboard: "Dashboard",
@@ -281,6 +284,15 @@ export const en = {
       `Deleted ${n}/${total} volumes. Error: ${err}`,
     volumesPruned: (mb: string) => `Pruned unused volumes (${mb} MB reclaimed)`,
     diskTrimmed: "Virtual disk trimmed successfully.",
+    refreshed: "Data refreshed.",
+    engineStarted: "WSL2 engine is now running.",
+    engineStopped: "WSL2 engine hibernated (0 MB RAM).",
+    containerActionDone: (action: "start" | "stop" | "restart" | "remove"): string => {
+      if (action === "start") return "Container started.";
+      if (action === "stop") return "Container stopped.";
+      if (action === "restart") return "Container restarted.";
+      return "Container deleted.";
+    },
   },
   modals: {
     runTitle: "Run New Container",

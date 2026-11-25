@@ -3,6 +3,7 @@
   import { daemonApi, type EngineConfig } from "../../lib/api/daemon";
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
+  import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import { i18n, type LocalePreference } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
 
@@ -20,6 +21,7 @@
   };
 
   let saving = $state(false);
+  let savingRestart = $state(false);
   let loading = $state(false);
   let draft = $state<EngineConfig>(cloneConfig(DEFAULT_CONFIG));
 
@@ -100,6 +102,7 @@
   async function save(restartAfter = false) {
     if (!isConnected) return;
     saving = true;
+    savingRestart = restartAfter;
     try {
       const resp = await daemonApi.updateConfig(draft);
       if (resp.status === "ack") {
@@ -121,6 +124,7 @@
       engineStore.error = String(e);
     } finally {
       saving = false;
+      savingRestart = false;
     }
   }
 </script>
@@ -142,15 +146,10 @@
           {i18n.t.settings.unsavedChanges}
         </span>
       {/if}
-      <button
-        type="button"
-        onclick={load}
+      <RefreshButton
+        onRefresh={load}
         disabled={loading || saving}
-        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-      >
-        <Icon name="refresh" class={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-        {i18n.t.common.refresh}
-      </button>
+      />
     </div>
   </div>
 
@@ -390,18 +389,24 @@
           type="button"
           onclick={() => save(false)}
           disabled={!isConnected || !isDirty || saving || engineStore.busy}
-          class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
         >
-          {saving ? i18n.t.settings.saving : i18n.t.settings.saveSettings}
+          {#if saving && !savingRestart}
+            <Icon name="spinner" class="h-4 w-4 animate-spin" />
+          {/if}
+          {saving && !savingRestart ? i18n.t.settings.saving : i18n.t.settings.saveSettings}
         </button>
         {#if wslDirty && engineStore.state === "running"}
           <button
             type="button"
             onclick={() => save(true)}
             disabled={!isConnected || saving || engineStore.busy}
-            class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
-            {i18n.t.settings.saveAndRestart}
+            {#if saving && savingRestart}
+              <Icon name="spinner" class="h-4 w-4 animate-spin" />
+            {/if}
+            {saving && savingRestart ? i18n.t.settings.saving : i18n.t.settings.saveAndRestart}
           </button>
         {/if}
         {#if isDirty}

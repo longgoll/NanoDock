@@ -24,9 +24,13 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         &[&open_item, &start_item, &stop_item, &trim_item, &quit_item],
     )?;
 
-    TrayIconBuilder::new()
+    let mut builder = TrayIconBuilder::new()
         .menu(&menu)
-        .tooltip("NanoDock — Lightweight WSL2 Docker Engine")
+        .tooltip("NanoDock — Lightweight WSL2 Docker Engine");
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+    builder
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
                 let _ = open_or_focus_dashboard(app);

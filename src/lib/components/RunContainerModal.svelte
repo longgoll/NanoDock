@@ -1,6 +1,7 @@
 <script lang="ts">
   import { i18n } from "../i18n/index.svelte";
   import { engineStore } from "../stores/engine.svelte";
+  import Icon from "./Icon.svelte";
 
   let {
     open = false,
@@ -181,9 +182,12 @@
         <button
           type="submit"
           disabled={engineStore.busy || !imageRef.trim()}
-          class="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
         >
-          {engineStore.busy ? i18n.t.modals.runStarting : i18n.t.containers.runContainer}
+          {#if engineStore.isPending("container:run")}
+            <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+          {/if}
+          {engineStore.isPending("container:run") ? i18n.t.modals.runStarting : i18n.t.containers.runContainer}
         </button>
       </div>
     </form>

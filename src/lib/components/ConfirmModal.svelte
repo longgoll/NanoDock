@@ -77,13 +77,16 @@
           type="button"
           onclick={onConfirm}
           disabled={busy}
-          class={`rounded-lg px-4 py-2 text-sm font-medium text-white shadow-xs transition disabled:opacity-50 ${
+          class={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-xs transition disabled:opacity-50 ${
             danger
               ? "bg-rose-600 hover:bg-rose-500"
               : "bg-amber-600 hover:bg-amber-500"
           }`}
         >
-          {busy ? "Working..." : confirmLabel}
+          {#if busy}
+            <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+          {/if}
+          {busy ? i18n.t.common.working : confirmLabel}
         </button>
       </div>
     </div>

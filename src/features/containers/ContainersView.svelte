@@ -9,6 +9,7 @@
   import EngineSleepingCard from "../../lib/components/EngineSleepingCard.svelte";
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
+  import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import RunContainerModal from "../../lib/components/RunContainerModal.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
   import Tooltip from "../../lib/components/Tooltip.svelte";
@@ -31,6 +32,7 @@
   let collapsedGroups = $state<Record<string, boolean>>({});
   let selectedIds = $state<Set<string>>(new Set());
   let copiedId = $state<string | null>(null);
+  let openingShellId = $state<string | null>(null);
 
   const confirmState = useConfirm();
 
@@ -181,7 +183,7 @@
         label: "Delete Stack",
         danger: true,
         action: async () => {
-          await engineStore.runContainersBatch(targetIds, "remove");
+          await engineStore.runContainersBatch(targetIds, "remove", `group:${group.name}`);
           const next = new Set(selectedIds);
           for (const id of targetIds) next.delete(id);
           selectedIds = next;
@@ -190,7 +192,7 @@
       return;
     }
 
-    await engineStore.runContainersBatch(targetIds, action);
+    await engineStore.runContainersBatch(targetIds, action, `group:${group.name}`);
   }
 
   async function runSelectedAction(action: ContainerActionKind) {
@@ -225,7 +227,7 @@
       label: "Stop All",
       danger: false,
       action: async () => {
-        await engineStore.runContainersBatch(ids, "stop");
+        await engineStore.runContainersBatch(ids, "stop", "containers:stop-all");
       },
     });
   }
@@ -252,10 +254,14 @@
   }
 
   async function openShell(id: string) {
+    if (openingShellId) return;
+    openingShellId = id;
     try {
       await daemonApi.openContainerShell(id);
     } catch (e) {
       engineStore.error = String(e);
+    } finally {
+      openingShellId = null;
     }
   }
 
@@ -347,7 +353,10 @@
             class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300 dark:hover:bg-rose-500/25"
             title={i18n.t.containers.stopAll(runningCount)}
           >
-            <Icon name="stop" class="h-3.5 w-3.5" />
+            <Icon
+              name={engineStore.isPending("containers:stop-all:stop") ? "spinner" : "stop"}
+              class={`h-3.5 w-3.5 ${engineStore.isPending("containers:stop-all:stop") ? "animate-spin" : ""}`}
+            />
             {i18n.t.containers.stopAll(runningCount)}
           </button>
         {/if}
@@ -367,18 +376,10 @@
           </button>
         </Tooltip>
 
-        <button
-          type="button"
-          onclick={() => engineStore.refreshContainers()}
+        <RefreshButton
+          onRefresh={() => engineStore.refreshContainers()}
           disabled={engineStore.loadingResources}
-          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-        >
-          <Icon
-            name="refresh"
-            class={`h-3.5 w-3.5 ${engineStore.loadingResources ? "animate-spin" : ""}`}
-          />
-          {i18n.t.common.refresh}
-        </button>
+        />
       </div>
     {/if}
   </div>
@@ -459,7 +460,10 @@
             disabled={engineStore.busy || selectedContainers.every((c) => c.state === "running")}
             class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-40"
           >
-            <Icon name="play" class="h-3 w-3" />
+            <Icon
+              name={engineStore.isPending("containers:batch:start") ? "spinner" : "play"}
+              class={`h-3 w-3 ${engineStore.isPending("containers:batch:start") ? "animate-spin" : ""}`}
+            />
             {i18n.t.common.start}
           </button>
           <button
@@ -468,7 +472,10 @@
             disabled={engineStore.busy || selectedContainers.every((c) => c.state !== "running")}
             class="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-amber-500 disabled:opacity-40"
           >
-            <Icon name="stop" class="h-3 w-3" />
+            <Icon
+              name={engineStore.isPending("containers:batch:stop") ? "spinner" : "stop"}
+              class={`h-3 w-3 ${engineStore.isPending("containers:batch:stop") ? "animate-spin" : ""}`}
+            />
             {i18n.t.common.stop}
           </button>
           <button
@@ -477,6 +484,9 @@
             disabled={engineStore.busy || selectedContainers.every((c) => c.state !== "running")}
             class="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           >
+            {#if engineStore.isPending("containers:batch:restart")}
+              <Icon name="spinner" class="h-3 w-3 animate-spin" />
+            {/if}
             {i18n.t.common.restart}
           </button>
           <button
@@ -485,6 +495,9 @@
             disabled={engineStore.busy}
             class="inline-flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-rose-500 disabled:opacity-40"
           >
+            {#if engineStore.isPending("containers:batch:remove")}
+              <Icon name="spinner" class="h-3 w-3 animate-spin" />
+            {/if}
             {i18n.t.common.delete}
           </button>
           <button
@@ -586,7 +599,10 @@
                         aria-label={`Start all in stack ${group.name}`}
                         class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
                       >
-                        <Icon name="play" class="h-4 w-4" />
+                        <Icon
+                          name={engineStore.isPending(`group:${group.name}:start`) ? "spinner" : "play"}
+                          class={`h-4 w-4 ${engineStore.isPending(`group:${group.name}:start`) ? "animate-spin" : ""}`}
+                        />
                       </button>
                     {/if}
                     {#if group.runningCount > 0}
@@ -598,7 +614,10 @@
                         aria-label={`Stop all in stack ${group.name}`}
                         class="rounded-lg p-1.5 text-amber-600 transition hover:bg-amber-50 disabled:opacity-40 dark:text-amber-400 dark:hover:bg-amber-500/15"
                       >
-                        <Icon name="stop" class="h-4 w-4" />
+                        <Icon
+                          name={engineStore.isPending(`group:${group.name}:stop`) ? "spinner" : "stop"}
+                          class={`h-4 w-4 ${engineStore.isPending(`group:${group.name}:stop`) ? "animate-spin" : ""}`}
+                        />
                       </button>
                       <button
                         type="button"
@@ -608,7 +627,10 @@
                         aria-label={`Restart running in stack ${group.name}`}
                         class="rounded-lg p-1.5 text-sky-600 transition hover:bg-sky-50 disabled:opacity-40 dark:text-sky-400 dark:hover:bg-sky-500/15"
                       >
-                        <Icon name="refresh" class="h-4 w-4" />
+                        <Icon
+                          name="refresh"
+                          class={`h-4 w-4 ${engineStore.isPending(`group:${group.name}:restart`) ? "animate-spin" : ""}`}
+                        />
                       </button>
                     {/if}
                     <button
@@ -619,7 +641,10 @@
                       aria-label={`Delete stack ${group.name}`}
                       class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
                     >
-                      <Icon name="trash" class="h-4 w-4" />
+                      <Icon
+                        name={engineStore.isPending(`group:${group.name}:remove`) ? "spinner" : "trash"}
+                        class={`h-4 w-4 ${engineStore.isPending(`group:${group.name}:remove`) ? "animate-spin" : ""}`}
+                      />
                     </button>
                   </div>
                 </td>
@@ -737,7 +762,10 @@
               aria-label={`Stop ${displayName}`}
               class="rounded-lg p-1.5 text-amber-600 transition hover:bg-amber-50 disabled:opacity-40 dark:text-amber-400 dark:hover:bg-amber-500/15"
             >
-              <Icon name="stop" class="h-4 w-4" />
+              <Icon
+                name={engineStore.isPending(`container:${c.id}:stop`) ? "spinner" : "stop"}
+                class={`h-4 w-4 ${engineStore.isPending(`container:${c.id}:stop`) ? "animate-spin" : ""}`}
+              />
             </button>
           </Tooltip>
           <Tooltip text={i18n.t.containers.restartTooltip}>
@@ -748,17 +776,24 @@
               aria-label={`Restart ${displayName}`}
               class="rounded-lg p-1.5 text-sky-600 transition hover:bg-sky-50 disabled:opacity-40 dark:text-sky-400 dark:hover:bg-sky-500/15"
             >
-              <Icon name="refresh" class="h-4 w-4" />
+              <Icon
+                name="refresh"
+                class={`h-4 w-4 ${engineStore.isPending(`container:${c.id}:restart`) ? "animate-spin" : ""}`}
+              />
             </button>
           </Tooltip>
           <Tooltip text={i18n.t.containers.shellTooltip}>
             <button
               type="button"
               onclick={() => openShell(c.id)}
+              disabled={openingShellId === c.id}
               aria-label={`Open shell in ${displayName}`}
-              class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
+              class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
             >
-              <Icon name="terminal" class="h-4 w-4" />
+              <Icon
+                name={openingShellId === c.id ? "spinner" : "terminal"}
+                class={`h-4 w-4 ${openingShellId === c.id ? "animate-spin" : ""}`}
+              />
             </button>
           </Tooltip>
         {:else}
@@ -770,7 +805,10 @@
               aria-label={`Start ${displayName}`}
               class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
             >
-              <Icon name="play" class="h-4 w-4" />
+              <Icon
+                name={engineStore.isPending(`container:${c.id}:start`) ? "spinner" : "play"}
+                class={`h-4 w-4 ${engineStore.isPending(`container:${c.id}:start`) ? "animate-spin" : ""}`}
+              />
             </button>
           </Tooltip>
         {/if}
@@ -802,7 +840,10 @@
             aria-label={`Delete ${displayName}`}
             class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
           >
-            <Icon name="trash" class="h-4 w-4" />
+            <Icon
+              name={engineStore.isPending(`container:${c.id}:remove`) ? "spinner" : "trash"}
+              class={`h-4 w-4 ${engineStore.isPending(`container:${c.id}:remove`) ? "animate-spin" : ""}`}
+            />
           </button>
         </Tooltip>
       </div>

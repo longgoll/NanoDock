@@ -6,6 +6,7 @@
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
   import InUseBadge from "../../lib/components/InUseBadge.svelte";
+  import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
   import Tooltip from "../../lib/components/Tooltip.svelte";
   import { i18n } from "../../lib/i18n/index.svelte";
@@ -205,22 +206,17 @@
             disabled={engineStore.busy}
             class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300"
           >
-            <Icon name="trash" class="h-3.5 w-3.5" />
+            <Icon
+              name={engineStore.isPending("volumes:prune") ? "spinner" : "trash"}
+              class={`h-3.5 w-3.5 ${engineStore.isPending("volumes:prune") ? "animate-spin" : ""}`}
+            />
             {i18n.t.volumes.pruneUnused(unusedCount)}
           </button>
         {/if}
-        <button
-          type="button"
-          onclick={() => engineStore.refreshVolumes()}
+        <RefreshButton
+          onRefresh={() => engineStore.refreshVolumes()}
           disabled={engineStore.loadingResources}
-          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-        >
-          <Icon
-            name="refresh"
-            class={`h-3.5 w-3.5 ${engineStore.loadingResources ? "animate-spin" : ""}`}
-          />
-          {i18n.t.common.refresh}
-        </button>
+        />
       </div>
     {/if}
   </div>
@@ -280,8 +276,11 @@
             type="button"
             onclick={confirmDeleteSelected}
             disabled={engineStore.busy}
-            class="rounded-md bg-rose-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-rose-500 disabled:opacity-50"
+            class="inline-flex items-center gap-1.5 rounded-md bg-rose-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-rose-500 disabled:opacity-50"
           >
+            {#if engineStore.isPending("volumes:batch:remove")}
+              <Icon name="spinner" class="h-3 w-3 animate-spin" />
+            {/if}
             {i18n.t.common.deleteSelected}
           </button>
           <button
@@ -390,7 +389,10 @@
                         aria-label={`Delete volume ${vol.name}`}
                         class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
                       >
-                        <Icon name="trash" class="h-4 w-4" />
+                        <Icon
+                          name={engineStore.isPending(`volume:${vol.name}:remove`) ? "spinner" : "trash"}
+                          class={`h-4 w-4 ${engineStore.isPending(`volume:${vol.name}:remove`) ? "animate-spin" : ""}`}
+                        />
                       </button>
                     </Tooltip>
                   {/if}
@@ -459,9 +461,12 @@
         <button
           type="submit"
           disabled={engineStore.busy || !newVolumeName.trim()}
-          class="rounded-lg bg-sky-600 px-4 py-2 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+          class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
         >
-          {engineStore.busy ? i18n.t.modals.creating : i18n.t.volumes.createVolume}
+          {#if engineStore.isPending("volumes:create")}
+            <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+          {/if}
+          {engineStore.isPending("volumes:create") ? i18n.t.modals.creating : i18n.t.volumes.createVolume}
         </button>
       </div>
     </form>

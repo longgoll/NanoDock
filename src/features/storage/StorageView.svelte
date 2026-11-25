@@ -2,26 +2,16 @@
   import { onMount } from "svelte";
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
+  import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { formatBytes } from "../../lib/utils/format";
-
-  let refreshing = $state(false);
 
   onMount(() => {
     if (!engineStore.config) {
       void engineStore.loadConfig();
     }
   });
-
-  async function refreshSize() {
-    refreshing = true;
-    try {
-      await engineStore.refresh();
-    } finally {
-      refreshing = false;
-    }
-  }
 
   const sparseEnabled = $derived(engineStore.config?.wsl.sparse_vhd ?? true);
 </script>
@@ -48,22 +38,21 @@
       </p>
     </div>
     <div class="flex items-center gap-2.5">
-      <button
-        type="button"
-        onclick={refreshSize}
-        disabled={refreshing || engineStore.busy}
-        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-      >
-        <Icon name="refresh" class={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-        {i18n.t.common.refresh}
-      </button>
+      <RefreshButton
+        size="md"
+        onRefresh={() => engineStore.refresh()}
+        disabled={engineStore.busy}
+      />
       <button
         type="button"
         onclick={() => engineStore.trim()}
         disabled={engineStore.busy}
-        class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-emerald-500 disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-emerald-500 disabled:opacity-50"
       >
-        {engineStore.busy ? i18n.t.storage.trimming : i18n.t.storage.reclaimButton}
+        {#if engineStore.isPending("engine:trim")}
+          <Icon name="spinner" class="h-4 w-4 animate-spin" />
+        {/if}
+        {engineStore.isPending("engine:trim") ? i18n.t.storage.trimming : i18n.t.storage.reclaimButton}
       </button>
     </div>
   </div>

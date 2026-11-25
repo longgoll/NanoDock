@@ -3,6 +3,8 @@ import type { Translations } from "./en";
 export const vi: Translations = {
   common: {
     refresh: "Làm mới",
+    refreshing: "Đang làm mới...",
+    refreshed: "Đã làm mới",
     cancel: "Hủy",
     delete: "Xóa",
     deleteSelected: "Xóa mục đã chọn",
@@ -15,6 +17,7 @@ export const vi: Translations = {
     stop: "Dừng",
     restart: "Khởi động lại",
     moreInfo: "Thông tin thêm",
+    working: "Đang xử lý...",
   },
   nav: {
     dashboard: "Tổng quan",
@@ -283,6 +286,15 @@ export const vi: Translations = {
       `Đã xóa ${n}/${total} volumes. Lỗi: ${err}`,
     volumesPruned: (mb: string) => `Đã dọn các volume chưa dùng (thu hồi ${mb} MB)`,
     diskTrimmed: "Đã thu hồi dung lượng đĩa ảo (.vhdx) thành công.",
+    refreshed: "Đã làm mới dữ liệu.",
+    engineStarted: "WSL2 engine đã khởi động.",
+    engineStopped: "WSL2 engine đã ngủ đông (0 MB RAM).",
+    containerActionDone: (action: "start" | "stop" | "restart" | "remove") => {
+      if (action === "start") return "Đã chạy container.";
+      if (action === "stop") return "Đã dừng container.";
+      if (action === "restart") return "Đã khởi động lại container.";
+      return "Đã xóa container.";
+    },
   },
   modals: {
     runTitle: "Chạy Container mới",

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
+  import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import StatusBadge from "../../lib/components/StatusBadge.svelte";
   import Tooltip from "../../lib/components/Tooltip.svelte";
   import { i18n } from "../../lib/i18n/index.svelte";
@@ -12,7 +13,6 @@
 
   let { onNavigate }: { onNavigate?: (tab: NavTarget) => void } = $props();
 
-  let refreshing = $state(false);
   let copiedKey = $state<"pipe" | "cli" | null>(null);
 
   const isStopped = $derived(engineStore.state === "stopped");
@@ -22,15 +22,6 @@
       void engineStore.loadConfig();
     }
   });
-
-  async function refreshDashboard() {
-    refreshing = true;
-    try {
-      await engineStore.refreshAll(true);
-    } finally {
-      refreshing = false;
-    }
-  }
 
   async function copyText(key: "pipe" | "cli", text: string) {
     try {
@@ -76,15 +67,11 @@
     </div>
 
     <div class="flex gap-3">
-      <button
-        type="button"
-        onclick={refreshDashboard}
-        disabled={engineStore.busy || refreshing}
-        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-      >
-        <Icon name="refresh" class={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-        {i18n.t.common.refresh}
-      </button>
+      <RefreshButton
+        size="md"
+        onRefresh={() => engineStore.refreshAll(true)}
+        disabled={engineStore.busy}
+      />
 
       {#if engineStore.state === "stopped"}
         <button
@@ -93,8 +80,11 @@
           disabled={engineStore.busy}
           class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
         >
-          <Icon name="play" class="h-4 w-4" />
-          {engineStore.busy ? i18n.t.dashboard.starting : i18n.t.dashboard.startEngine}
+          <Icon
+            name={engineStore.isPending("engine:start") ? "spinner" : "play"}
+            class={`h-4 w-4 ${engineStore.isPending("engine:start") ? "animate-spin" : ""}`}
+          />
+          {engineStore.isPending("engine:start") ? i18n.t.dashboard.starting : i18n.t.dashboard.startEngine}
         </button>
       {:else}
         <button
@@ -103,8 +93,11 @@
           disabled={engineStore.busy}
           class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
         >
-          <Icon name="stop" class="h-4 w-4" />
-          {i18n.t.dashboard.hibernate}
+          <Icon
+            name={engineStore.isPending("engine:stop") ? "spinner" : "stop"}
+            class={`h-4 w-4 ${engineStore.isPending("engine:stop") ? "animate-spin" : ""}`}
+          />
+          {engineStore.isPending("engine:stop") ? i18n.t.status.stopping : i18n.t.dashboard.hibernate}
         </button>
       {/if}
     </div>

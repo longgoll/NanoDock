@@ -29,7 +29,8 @@
     | "close"
     | "arrow-left"
     | "activity"
-    | "help";
+    | "help"
+    | "spinner";
 
   let {
     name,
@@ -378,5 +379,16 @@
     <circle cx="12" cy="12" r="10" />
     <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
     <path d="M12 17h.01" />
+  </svg>
+{:else if name === "spinner"}
+  <svg
+    class={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2.25"
+    stroke-linecap="round"
+  >
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
   </svg>
 {/if}

@@ -7,6 +7,7 @@
   } from "../../lib/api/daemon";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import Icon from "../../lib/components/Icon.svelte";
+  import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
   import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
@@ -53,6 +54,7 @@
   // Env & Mounts search/copy
   let envQuery = $state("");
   let copiedKey = $state<string | null>(null);
+  let openingShell = $state(false);
 
   const summary = $derived(
     engineStore.containers.find((c) => c.id === containerId) ?? null,
@@ -192,10 +194,14 @@
   }
 
   async function openShell() {
+    if (openingShell) return;
+    openingShell = true;
     try {
       await daemonApi.openContainerShell(containerId);
     } catch (e) {
       engineStore.error = String(e);
+    } finally {
+      openingShell = false;
     }
   }
 
@@ -326,9 +332,13 @@
         <button
           type="button"
           onclick={openShell}
-          class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
+          disabled={openingShell}
+          class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
         >
-          <Icon name="terminal" class="h-3.5 w-3.5" />
+          <Icon
+            name={openingShell ? "spinner" : "terminal"}
+            class={`h-3.5 w-3.5 ${openingShell ? "animate-spin" : ""}`}
+          />
           Open Terminal
         </button>
         <button
@@ -337,7 +347,10 @@
           disabled={engineStore.busy}
           class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-500 disabled:opacity-50"
         >
-          <Icon name="stop" class="h-3.5 w-3.5" />
+          <Icon
+            name={engineStore.isPending(`container:${containerId}:stop`) ? "spinner" : "stop"}
+            class={`h-3.5 w-3.5 ${engineStore.isPending(`container:${containerId}:stop`) ? "animate-spin" : ""}`}
+          />
           {i18n.t.common.stop}
         </button>
         <button
@@ -346,7 +359,10 @@
           disabled={engineStore.busy}
           class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         >
-          <Icon name="refresh" class="h-3.5 w-3.5" />
+          <Icon
+            name="refresh"
+            class={`h-3.5 w-3.5 ${engineStore.isPending(`container:${containerId}:restart`) ? "animate-spin" : ""}`}
+          />
           {i18n.t.common.restart}
         </button>
       {:else}
@@ -356,7 +372,10 @@
           disabled={engineStore.busy}
           class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
         >
-          <Icon name="play" class="h-3.5 w-3.5" />
+          <Icon
+            name={engineStore.isPending(`container:${containerId}:start`) ? "spinner" : "play"}
+            class={`h-3.5 w-3.5 ${engineStore.isPending(`container:${containerId}:start`) ? "animate-spin" : ""}`}
+          />
           {i18n.t.common.start}
         </button>
       {/if}
@@ -366,8 +385,11 @@
         disabled={engineStore.busy}
         class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300"
       >
-        <Icon name="trash" class="h-3.5 w-3.5" />
-        Delete
+        <Icon
+          name={engineStore.isPending(`container:${containerId}:remove`) ? "spinner" : "trash"}
+          class={`h-3.5 w-3.5 ${engineStore.isPending(`container:${containerId}:remove`) ? "animate-spin" : ""}`}
+        />
+        {i18n.t.common.delete}
       </button>
     </div>
   </div>
@@ -429,14 +451,12 @@
             <span class={`h-1.5 w-1.5 rounded-full ${liveLogs && isRunning ? "animate-pulse bg-emerald-500" : "bg-slate-400"}`}></span>
             Live
           </button>
-          <button
-            type="button"
-            onclick={() => fetchLogs()}
+          <RefreshButton
+            size="xs"
+            onRefresh={() => fetchLogs()}
             disabled={loadingLogs}
-            class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            {loadingLogs ? "Loading..." : "Refresh"}
-          </button>
+            showNotice={false}
+          />
           <button
             type="button"
             onclick={copyLogs}

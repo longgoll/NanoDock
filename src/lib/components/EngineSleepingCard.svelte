@@ -22,7 +22,10 @@
     disabled={engineStore.busy}
     class="mt-5 inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
   >
-    <Icon name="play" class="h-4 w-4" />
-    {engineStore.busy ? i18n.t.sleepingCard.wakingUp : i18n.t.sleepingCard.wakeUp}
+    <Icon
+      name={engineStore.isPending("engine:start") ? "spinner" : "play"}
+      class={`h-4 w-4 ${engineStore.isPending("engine:start") ? "animate-spin" : ""}`}
+    />
+    {engineStore.isPending("engine:start") ? i18n.t.sleepingCard.wakingUp : i18n.t.sleepingCard.wakeUp}
   </button>
 </div>
