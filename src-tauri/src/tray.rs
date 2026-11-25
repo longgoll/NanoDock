@@ -1,9 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
-use shared_types::ControlRequest;
+use shared_types::{ControlRequest, ControlResponse, EngineState};
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
 use crate::daemon_client::send_control_request;
@@ -30,7 +31,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     if let Some(icon) = app.default_window_icon().cloned() {
         builder = builder.icon(icon);
     }
-    builder
+    let tray = builder
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
                 let _ = open_or_focus_dashboard(app);
@@ -70,5 +71,44 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
 
+    spawn_tray_status_sync(tray, start_item, stop_item);
     Ok(())
+}
+
+fn spawn_tray_status_sync(
+    tray: TrayIcon,
+    start_item: MenuItem<tauri::Wry>,
+    stop_item: MenuItem<tauri::Wry>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        loop {
+            interval.tick().await;
+            match send_control_request(ControlRequest::GetStatus).await {
+                Ok(ControlResponse::Status {
+                    state,
+                    running_containers,
+                    ..
+                }) => {
+                    let tooltip = match state {
+                        EngineState::Running => {
+                            format!("NanoDock — Running ({running_containers} active)")
+                        }
+                        EngineState::Stopped => "NanoDock — Sleeping (0 MB RAM)".to_string(),
+                        EngineState::Starting => "NanoDock — Waking up...".to_string(),
+                        EngineState::Stopping => "NanoDock — Hibernating...".to_string(),
+                        EngineState::Error => "NanoDock — Engine Error".to_string(),
+                    };
+                    let _ = tray.set_tooltip(Some(&tooltip));
+                    let _ = start_item
+                        .set_enabled(matches!(state, EngineState::Stopped | EngineState::Error));
+                    let _ = stop_item.set_enabled(matches!(state, EngineState::Running));
+                }
+                Err(_) => {
+                    let _ = tray.set_tooltip(Some("NanoDock — Daemon offline"));
+                }
+                _ => {}
+            }
+        }
+    });
 }

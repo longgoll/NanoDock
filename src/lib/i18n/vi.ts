@@ -24,6 +24,7 @@ export const vi: Translations = {
     containers: "Containers",
     images: "Images",
     volumes: "Volumes",
+    networks: "Networks",
     storage: "Ổ đĩa & Trim",
     settings: "Cài đặt",
     quickGuide: "Hướng dẫn nhanh",
@@ -285,6 +286,11 @@ export const vi: Translations = {
     volumesDeletedBatchError: (n: number, total: number, err: string) =>
       `Đã xóa ${n}/${total} volumes. Lỗi: ${err}`,
     volumesPruned: (mb: string) => `Đã dọn các volume chưa dùng (thu hồi ${mb} MB)`,
+    networkCreated: (name: string) => `Đã tạo network "${name}".`,
+    networkDeleted: (name: string) => `Đã xóa network "${name}".`,
+    networksPruned: "Đã dọn các network chưa dùng.",
+    stackActionDone: (stack: string, action: "start" | "stop" | "restart") =>
+      `Đã ${action === "start" ? "chạy" : action === "stop" ? "dừng" : "khởi động lại"} stack "${stack}".`,
     diskTrimmed: "Đã thu hồi dung lượng đĩa ảo (.vhdx) thành công.",
     refreshed: "Đã làm mới dữ liệu.",
     engineStarted: "WSL2 engine đã khởi động.",

@@ -123,6 +123,42 @@ pub async fn prune_volumes() -> Result<ControlResponse, String> {
 }
 
 #[tauri::command]
+pub async fn list_networks() -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::ListNetworks)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn create_network(
+    name: String,
+    driver: Option<String>,
+    internal: bool,
+) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::CreateNetwork {
+        name,
+        driver,
+        internal,
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn remove_network(id: String) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::RemoveNetwork { id })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn prune_networks() -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::PruneNetworks)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn inspect_container(id: String) -> Result<ControlResponse, String> {
     send_control_request(ControlRequest::InspectContainer { id })
         .await

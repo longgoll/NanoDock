@@ -51,6 +51,21 @@ pub struct VolumeSummary {
     pub used_by: Vec<String>,
 }
 
+/// Summary of a Docker network returned to the UI/CLI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkSummary {
+    pub id: String,
+    pub name: String,
+    pub driver: String,
+    pub scope: String,
+    #[serde(default)]
+    pub internal: bool,
+    #[serde(default)]
+    pub in_use: bool,
+    #[serde(default)]
+    pub used_by: Vec<String>,
+}
+
 /// Mount entry inside a container inspect payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContainerMount {
@@ -141,6 +156,16 @@ pub enum ControlRequest {
         name: String,
     },
     PruneVolumes,
+    ListNetworks,
+    CreateNetwork {
+        name: String,
+        driver: Option<String>,
+        internal: bool,
+    },
+    RemoveNetwork {
+        id: String,
+    },
+    PruneNetworks,
 }
 
 /// Responses returned by `core-daemon` over the control pipe.
@@ -164,6 +189,7 @@ pub enum ControlResponse {
     },
     Images(Vec<ImageSummary>),
     Volumes(Vec<VolumeSummary>),
+    Networks(Vec<NetworkSummary>),
     PruneResult {
         reclaimed_bytes: u64,
     },

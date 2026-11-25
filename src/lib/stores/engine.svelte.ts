@@ -7,6 +7,7 @@ import {
   type EngineConfig,
   type EngineState,
   type ImageSummary,
+  type NetworkSummary,
   type RunContainerSpec,
   type VolumeSummary,
 } from "../api/daemon";
@@ -21,6 +22,7 @@ class EngineStore {
   containers = $state<ContainerSummary[]>([]);
   images = $state<ImageSummary[]>([]);
   volumes = $state<VolumeSummary[]>([]);
+  networks = $state<NetworkSummary[]>([]);
   busy = $state<boolean>(false);
   pendingKeys = $state<Set<string>>(new Set());
   loadingResources = $state<boolean>(false);
@@ -84,6 +86,7 @@ class EngineStore {
           this.containers = [];
           this.images = [];
           this.volumes = [];
+          this.networks = [];
           this.runningContainers = 0;
         } else if (this.containers.length === 0) {
           this.runningContainers = resp.data.running_containers;
@@ -108,6 +111,7 @@ class EngineStore {
           this.refreshContainers(silent),
           this.refreshImages(silent),
           this.refreshVolumes(silent),
+          this.refreshNetworks(silent),
         ]);
       }
     } finally {
@@ -457,6 +461,71 @@ class EngineStore {
           this.setNotice(i18n.t.notices.diskTrimmed);
         }
         await this.refresh();
+      } catch (e) {
+        this.error = String(e);
+      }
+    });
+  }
+
+  async refreshNetworks(silent = false) {
+    if (this.state === "stopped") return;
+    if (!silent) this.loadingResources = true;
+    try {
+      const resp = await daemonApi.listNetworks();
+      if (resp.status === "networks") {
+        this.networks = resp.data;
+        this.error = null;
+      } else {
+        this.handleError(resp);
+      }
+    } catch (e) {
+      if (!silent) this.error = String(e);
+    } finally {
+      if (!silent) this.loadingResources = false;
+    }
+  }
+
+  async createNetwork(name: string, driver?: string, internal = false): Promise<boolean> {
+    return this.withPending("networks:create", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.createNetwork(name, driver, internal);
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.networkCreated(name));
+          await this.refreshNetworks(true);
+          return true;
+        }
+        return false;
+      } catch (e) {
+        this.error = String(e);
+        return false;
+      }
+    });
+  }
+
+  async removeNetwork(id: string, name: string) {
+    await this.withPending(`network:${id}:remove`, async () => {
+      try {
+        const resp = await daemonApi.removeNetwork(id);
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.networkDeleted(name));
+          await this.refreshNetworks(true);
+        }
+      } catch (e) {
+        this.error = String(e);
+      }
+    });
+  }
+
+  async pruneNetworks() {
+    await this.withPending("networks:prune", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.pruneNetworks();
+        if (!this.handleError(resp)) {
+          this.setNotice(i18n.t.notices.networksPruned);
+          await this.refreshNetworks(true);
+        }
       } catch (e) {
         this.error = String(e);
       }

@@ -635,7 +635,7 @@ pub async fn prune_volumes<E: WslExecutor>(
         .unwrap_or(0))
 }
 
-async fn docker_http_request<E: WslExecutor>(
+pub(super) async fn docker_http_request<E: WslExecutor>(
     transport: &TransportManager<E>,
     method: &str,
     path: &str,
@@ -643,7 +643,7 @@ async fn docker_http_request<E: WslExecutor>(
     docker_http_json_request(transport, method, path, None).await
 }
 
-async fn docker_http_json_request<E: WslExecutor>(
+pub(super) async fn docker_http_json_request<E: WslExecutor>(
     transport: &TransportManager<E>,
     method: &str,
     path: &str,
@@ -690,7 +690,7 @@ fn parse_http_status(raw: &[u8]) -> Option<u16> {
     status_line.split_whitespace().nth(1)?.parse().ok()
 }
 
-fn sanitize_path_segment(input: &str) -> anyhow::Result<&str> {
+pub(super) fn sanitize_path_segment(input: &str) -> anyhow::Result<&str> {
     let trimmed = input.trim();
     if trimmed.is_empty() || trimmed.contains(['/', '\\', ' ', '\r', '\n', '?']) {
         anyhow::bail!("invalid identifier: {input}");

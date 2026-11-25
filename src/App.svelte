@@ -4,6 +4,7 @@
   import ContainersView from "./features/containers/ContainersView.svelte";
   import DashboardView from "./features/dashboard/DashboardView.svelte";
   import ImagesView from "./features/images/ImagesView.svelte";
+  import NetworksView from "./features/networks/NetworksView.svelte";
   import SettingsView from "./features/settings/SettingsView.svelte";
   import StorageView from "./features/storage/StorageView.svelte";
   import VolumesView from "./features/volumes/VolumesView.svelte";
@@ -12,7 +13,7 @@
   import { i18n } from "./lib/i18n/index.svelte";
   import { engineStore } from "./lib/stores/engine.svelte";
 
-  type Tab = "dashboard" | "containers" | "images" | "volumes" | "storage" | "settings";
+  type Tab = "dashboard" | "containers" | "images" | "volumes" | "networks" | "storage" | "settings";
   let activeTab = $state<Tab>("dashboard");
   let sidebarCollapsed = $state(false);
   let quickGuideOpen = $state(false);
@@ -23,6 +24,7 @@
     { id: "containers", label: i18n.t.nav.containers, icon: "containers" },
     { id: "images", label: i18n.t.nav.images, icon: "images" },
     { id: "volumes", label: i18n.t.nav.volumes, icon: "volumes" },
+    { id: "networks", label: i18n.t.nav.networks, icon: "network" },
     { id: "storage", label: i18n.t.nav.storage, icon: "storage" },
     { id: "settings", label: i18n.t.nav.settings, icon: "settings" },
   ]);
@@ -77,6 +79,9 @@
     }
     if (id === "volumes" && engineStore.volumes.length > 0) {
       return `${engineStore.volumes.length}`;
+    }
+    if (id === "networks" && engineStore.networks.length > 0) {
+      return `${engineStore.networks.length}`;
     }
     return null;
   }
@@ -270,6 +275,8 @@
       <ImagesView />
     {:else if activeTab === "volumes"}
       <VolumesView />
+    {:else if activeTab === "networks"}
+      <NetworksView />
     {:else if activeTab === "storage"}
       <StorageView />
     {:else}

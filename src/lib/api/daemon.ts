@@ -48,6 +48,16 @@ export interface VolumeSummary {
   used_by: string[];
 }
 
+export interface NetworkSummary {
+  id: string;
+  name: string;
+  driver: string;
+  scope: string;
+  internal: boolean;
+  in_use: boolean;
+  used_by: string[];
+}
+
 export interface ContainerMount {
   mount_type: string;
   source: string;
@@ -103,6 +113,7 @@ export type ControlResponse =
   | { status: "container_created"; data: { id: string } }
   | { status: "images"; data: ImageSummary[] }
   | { status: "volumes"; data: VolumeSummary[] }
+  | { status: "networks"; data: NetworkSummary[] }
   | { status: "prune_result"; data: { reclaimed_bytes: number } }
   | { status: "ack" }
   | { status: "error"; data: { message: string } };
@@ -128,6 +139,11 @@ export const daemonApi = {
     invoke<ControlResponse>("create_volume", { name, driver: driver ?? null }),
   removeVolume: (name: string) => invoke<ControlResponse>("remove_volume", { name }),
   pruneVolumes: () => invoke<ControlResponse>("prune_volumes"),
+  listNetworks: () => invoke<ControlResponse>("list_networks"),
+  createNetwork: (name: string, driver?: string, internal = false) =>
+    invoke<ControlResponse>("create_network", { name, driver: driver ?? null, internal }),
+  removeNetwork: (id: string) => invoke<ControlResponse>("remove_network", { id }),
+  pruneNetworks: () => invoke<ControlResponse>("prune_networks"),
   inspectContainer: (id: string) => invoke<ControlResponse>("inspect_container", { id }),
   getContainerStats: (id: string) => invoke<ControlResponse>("get_container_stats", { id }),
   runContainer: (spec: RunContainerSpec) => invoke<ControlResponse>("run_container", { spec }),

@@ -559,7 +559,7 @@
                     class="h-4 w-4 rounded border-slate-300 accent-sky-600"
                   />
                 </td>
-                <td colspan="4" class="px-3 py-2.5">
+                <td colspan="3" class="px-3 py-2.5">
                   <button
                     type="button"
                     onclick={() => toggleCollapseGroup(group.name)}
@@ -587,6 +587,37 @@
                       {group.runningCount}/{group.items.length} running
                     </span>
                   </button>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <div class="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onclick={() => runGroupAction(group, "start")}
+                      disabled={engineStore.busy || group.runningCount === group.items.length}
+                      title={i18n.t.common.start}
+                      class="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+                    >
+                      {i18n.t.common.start}
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => runGroupAction(group, "stop")}
+                      disabled={engineStore.busy || group.runningCount === 0}
+                      title={i18n.t.common.stop}
+                      class="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                    >
+                      {i18n.t.common.stop}
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => runGroupAction(group, "restart")}
+                      disabled={engineStore.busy || group.runningCount === 0}
+                      title={i18n.t.common.restart}
+                      class="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      {i18n.t.common.restart}
+                    </button>
+                  </div>
                 </td>
                 <td class="px-4 py-2.5 text-right">
                   <div class="inline-flex items-center gap-1">

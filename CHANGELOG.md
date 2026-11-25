@@ -5,6 +5,13 @@ All notable changes to NanoDock will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-26
+
+### Added
+- **Docker Networks Management:** Added `NetworkSummary` and network RPCs (`ListNetworks`, `CreateNetwork`, `RemoveNetwork`, `PruneNetworks`) in `core-daemon`, Tauri commands, and a new `NetworksView` tab with English/Vietnamese i18n.
+- **Compose Stack Quick Actions:** Added inline Start, Stop, and Restart buttons on Compose project group headers in `ContainersView`.
+- **Dynamic System Tray:** Tray icon tooltip and Start/Stop menu items now sync every 5s with live `EngineState` and active container count.
+
 ## [0.3.0] - 2026-11-26
 
 ### Added

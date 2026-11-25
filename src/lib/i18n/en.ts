@@ -22,6 +22,7 @@ export const en = {
     containers: "Containers",
     images: "Images",
     volumes: "Volumes",
+    networks: "Networks",
     storage: "Storage & Trim",
     settings: "Settings",
     quickGuide: "Quick Guide",
@@ -283,6 +284,11 @@ export const en = {
     volumesDeletedBatchError: (n: number, total: number, err: string) =>
       `Deleted ${n}/${total} volumes. Error: ${err}`,
     volumesPruned: (mb: string) => `Pruned unused volumes (${mb} MB reclaimed)`,
+    networkCreated: (name: string) => `Network "${name}" created.`,
+    networkDeleted: (name: string) => `Network "${name}" deleted.`,
+    networksPruned: "Pruned unused networks.",
+    stackActionDone: (stack: string, action: "start" | "stop" | "restart") =>
+      `Stack "${stack}" ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}.`,
     diskTrimmed: "Virtual disk trimmed successfully.",
     refreshed: "Data refreshed.",
     engineStarted: "WSL2 engine is now running.",

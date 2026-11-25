@@ -10,7 +10,7 @@ use wsl_bridge::{ensure_wslconfig, graceful_hibernate, trim_distro, wake_distro,
 
 use crate::app_context::AppContext;
 use crate::config_store;
-use crate::lifecycle::docker_api;
+use crate::lifecycle::{docker_api, networks};
 
 pub const CONTROL_PIPE_NAME: &str = r"\\.\pipe\nanodock_ctl";
 
@@ -280,6 +280,40 @@ async fn dispatch_request<E: WslExecutor>(
             }
         }
         ControlRequest::PruneVolumes => match docker_api::prune_volumes(&ctx.transport).await {
+            Ok(reclaimed_bytes) => ControlResponse::PruneResult { reclaimed_bytes },
+            Err(err) => ControlResponse::Error {
+                message: err.to_string(),
+            },
+        },
+        ControlRequest::ListNetworks => match networks::list_networks(&ctx.transport).await {
+            Ok(items) => ControlResponse::Networks(items),
+            Err(err) => ControlResponse::Error {
+                message: err.to_string(),
+            },
+        },
+        ControlRequest::CreateNetwork {
+            name,
+            driver,
+            internal,
+        } => {
+            match networks::create_network(&ctx.transport, &name, driver.as_deref(), internal)
+                .await
+            {
+                Ok(()) => ControlResponse::Ack,
+                Err(err) => ControlResponse::Error {
+                    message: err.to_string(),
+                },
+            }
+        }
+        ControlRequest::RemoveNetwork { id } => {
+            match networks::remove_network(&ctx.transport, &id).await {
+                Ok(()) => ControlResponse::Ack,
+                Err(err) => ControlResponse::Error {
+                    message: err.to_string(),
+                },
+            }
+        }
+        ControlRequest::PruneNetworks => match networks::prune_networks(&ctx.transport).await {
             Ok(reclaimed_bytes) => ControlResponse::PruneResult { reclaimed_bytes },
             Err(err) => ControlResponse::Error {
                 message: err.to_string(),
