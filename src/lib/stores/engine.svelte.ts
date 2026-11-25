@@ -29,6 +29,7 @@ class EngineStore {
   notice = $state<string | null>(null);
   theme = $state<ThemeMode>("light");
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshingAll = false;
 
   setNotice(msg: string | null) {
     if (this.noticeTimer) {
@@ -78,7 +79,14 @@ class EngineStore {
       const resp = await daemonApi.getStatus();
       if (resp.status === "status") {
         this.state = resp.data.state;
-        this.runningContainers = resp.data.running_containers;
+        if (this.state === "stopped") {
+          this.containers = [];
+          this.images = [];
+          this.volumes = [];
+          this.runningContainers = 0;
+        } else if (this.containers.length === 0) {
+          this.runningContainers = resp.data.running_containers;
+        }
         this.vhdxSizeBytes = resp.data.vhdx_size_bytes;
         this.error = null;
       } else {
@@ -90,13 +98,19 @@ class EngineStore {
   }
 
   async refreshAll(silent = false) {
-    await this.refresh();
-    if (this.state === "running") {
-      await Promise.all([
-        this.refreshContainers(silent),
-        this.refreshImages(silent),
-        this.refreshVolumes(silent),
-      ]);
+    if (this.refreshingAll) return;
+    this.refreshingAll = true;
+    try {
+      await this.refresh();
+      if (this.state === "running") {
+        await Promise.all([
+          this.refreshContainers(silent),
+          this.refreshImages(silent),
+          this.refreshVolumes(silent),
+        ]);
+      }
+    } finally {
+      this.refreshingAll = false;
     }
   }
 

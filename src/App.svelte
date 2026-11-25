@@ -31,21 +31,25 @@
 
     void engineStore.refreshAll(true);
 
-    const timer = setInterval(() => {
+    const syncAll = () => {
       if (document.hidden || !engineStore.autoRefresh || engineStore.busy) return;
-      void engineStore.refresh().then(() => {
-        if (engineStore.state !== "running") return;
-        if (activeTab === "containers") {
-          void engineStore.refreshContainers(true);
-        } else if (activeTab === "images") {
-          void engineStore.refreshImages(true);
-        } else if (activeTab === "volumes") {
-          void engineStore.refreshVolumes(true);
-        }
-      });
-    }, 5000);
+      void engineStore.refreshAll(true);
+    };
 
-    return () => clearInterval(timer);
+    const timer = setInterval(syncAll, 5000);
+    const onFocus = () => syncAll();
+    const onVisibilityChange = () => {
+      if (!document.hidden) syncAll();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   });
 
   function toggleSidebar() {
