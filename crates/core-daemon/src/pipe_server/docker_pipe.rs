@@ -15,6 +15,7 @@ pub const DOCKER_PIPE_NAME: &str = r"\\.\pipe\docker_engine";
 pub async fn serve_docker_pipe<E: WslExecutor + 'static>(ctx: Arc<AppContext<E>>) -> anyhow::Result<()> {
     let mut server = ServerOptions::new()
         .first_pipe_instance(true)
+        .reject_remote_clients(true)
         .create(DOCKER_PIPE_NAME)
         .with_context(|| {
             format!(
@@ -35,7 +36,10 @@ pub async fn serve_docker_pipe<E: WslExecutor + 'static>(ctx: Arc<AppContext<E>>
                     Ok(()) => {
                         let connected = server;
                         // Immediately create the next pipe instance before handling the client.
-                        server = match ServerOptions::new().create(DOCKER_PIPE_NAME) {
+                        server = match ServerOptions::new()
+                            .reject_remote_clients(true)
+                            .create(DOCKER_PIPE_NAME)
+                        {
                             Ok(next) => next,
                             Err(err) => {
                                 error!(error = %err, "Failed to allocate next Named Pipe instance");

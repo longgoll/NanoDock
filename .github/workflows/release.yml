@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-rootfs:
+    name: Build Alpine WSL2 RootFS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build micro-distro.tar.gz
+        run: |
+          mkdir -p rootfs-builder/out
+          docker build -f rootfs-builder/Dockerfile.rootfs -t nanodock-rootfs:build .
+          CONTAINER_ID=$(docker create nanodock-rootfs:build)
+          docker export "$CONTAINER_ID" | gzip -9 > rootfs-builder/out/micro-distro.tar.gz
+          docker rm "$CONTAINER_ID"
+
+      - name: Upload RootFS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: micro-distro-rootfs
+          path: rootfs-builder/out/micro-distro.tar.gz
+
+  build-windows:
+    name: Build Windows Bundle & Installer
+    needs: build-rootfs
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download RootFS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: micro-distro-rootfs
+          path: rootfs-builder/out
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build portable bundle
+        shell: pwsh
+        run: .\bundle.ps1
+
+      - name: Build NSIS installer
+        run: pnpm tauri build --bundles nsis
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            NanoDock-portable-windows-x64.zip
+            src-tauri/target/release/bundle/nsis/*.exe

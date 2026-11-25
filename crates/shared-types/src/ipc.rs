@@ -169,6 +169,7 @@ pub enum ControlRequest {
 }
 
 /// Responses returned by `core-daemon` over the control pipe.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "status", content = "data", rename_all = "snake_case")]
 pub enum ControlResponse {

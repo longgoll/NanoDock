@@ -5,6 +5,16 @@ All notable changes to NanoDock will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-11-26
+
+### Added
+- **RootFS BuildKit Support:** Added `docker-cli-buildx` to `rootfs-builder/Dockerfile.rootfs` for modern `docker build` and `docker compose build`.
+- **Portable & Installer Packaging:** Updated `bundle.ps1` to include `nanodock.exe` (`nanodock-cli`) and generate `NanoDock-portable-windows-x64.zip`; configured Tauri `nsis` installer with `installMode: "currentUser"` (no Admin required).
+- **CI/CD & Automated Releases:** Added `cargo clippy --workspace --all-targets -- -D clippy::all` to `.github/workflows/ci.yml` and created `.github/workflows/release.yml` for tag-triggered (`v*`) RootFS, portable ZIP, and NSIS installer releases.
+
+### Security
+- Enforced `reject_remote_clients(true)` (`PIPE_REJECT_REMOTE_CLIENTS`) on `\\.\pipe\docker_engine` and `\\.\pipe\nanodock_ctl` Named Pipe servers.
+
 ## [0.4.0] - 2026-11-26
 
 ### Added

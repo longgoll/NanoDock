@@ -27,6 +27,7 @@ async fn serve_control_pipe_at<E: WslExecutor + 'static>(
 ) -> anyhow::Result<()> {
     let mut server = ServerOptions::new()
         .first_pipe_instance(true)
+        .reject_remote_clients(true)
         .create(pipe_name)
         .with_context(|| format!("failed to bind {pipe_name}"))?;
 
@@ -42,7 +43,10 @@ async fn serve_control_pipe_at<E: WslExecutor + 'static>(
                 match res {
                     Ok(()) => {
                         let connected = server;
-                        server = match ServerOptions::new().create(pipe_name) {
+                        server = match ServerOptions::new()
+                            .reject_remote_clients(true)
+                            .create(pipe_name)
+                        {
                             Ok(next) => next,
                             Err(err) => {
                                 error!(error = %err, "Failed to allocate next Control pipe instance");

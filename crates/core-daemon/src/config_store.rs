@@ -108,10 +108,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("nanodock-cfg-{}", std::process::id()));
         let path = dir.join("config.json");
 
-        let mut cfg = EngineConfig::default();
-        cfg.idle_timeout_secs = Some(600);
-        cfg.auto_start_on_login = true;
-        cfg.wsl.memory_mb = 6144;
+        let cfg = EngineConfig {
+            idle_timeout_secs: Some(600),
+            auto_start_on_login: true,
+            wsl: shared_types::WslConfigSpec {
+                memory_mb: 6144,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
 
         save_config(&path, &cfg).unwrap();
         let loaded = load_or_default(&path);

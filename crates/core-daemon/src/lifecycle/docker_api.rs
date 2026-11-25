@@ -740,7 +740,7 @@ fn decode_docker_logs(raw: &[u8]) -> String {
     while pos + 8 <= raw.len() {
         let stream_type = raw[pos];
         let padding_ok = raw[pos + 1] == 0 && raw[pos + 2] == 0 && raw[pos + 3] == 0;
-        if !matches!(stream_type, 0 | 1 | 2) || !padding_ok {
+        if !matches!(stream_type, 0..=2) || !padding_ok {
             return String::from_utf8_lossy(raw).into_owned();
         }
         let size = u32::from_be_bytes([raw[pos + 4], raw[pos + 5], raw[pos + 6], raw[pos + 7]])

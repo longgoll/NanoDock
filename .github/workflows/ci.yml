@@ -23,6 +23,9 @@ jobs:
       - name: Check workspace
         run: cargo check --workspace
 
+      - name: Lint workspace with clippy
+        run: cargo clippy --workspace --all-targets -- -D clippy::all
+
       - name: Test workspace
         run: cargo test --workspace
 
