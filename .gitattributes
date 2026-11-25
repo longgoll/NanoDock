@@ -1,0 +1,13 @@
+* text=auto
+
+# Enforce LF for all Linux RootFS scripts, configs, and Rust sources
+rootfs-builder/rootfs/** text eol=lf
+*.sh text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.svelte text eol=lf
+*.ts text eol=lf
+
+# Windows scripts
+*.ps1 text eol=crlf

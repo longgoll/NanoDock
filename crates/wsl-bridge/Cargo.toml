@@ -1,0 +1,13 @@
+[package]
+name = "wsl-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+serde_json.workspace = true
+shared-types = { path = "../shared-types" }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true

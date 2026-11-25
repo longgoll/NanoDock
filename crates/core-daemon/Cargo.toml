@@ -1,0 +1,19 @@
+[package]
+name = "core-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait = "0.1"
+futures = "0.3"
+serde.workspace = true
+serde_json.workspace = true
+shared-types = { path = "../shared-types" }
+tokio.workspace = true
+tokio-util = { version = "0.7", features = ["compat", "rt"] }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+wsl-bridge = { path = "../wsl-bridge" }
+yamux = "0.13"

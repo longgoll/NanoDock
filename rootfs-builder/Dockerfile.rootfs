@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+
+# Stage 1: Build statically-linked nanodock-agent (musl)
+FROM rust:alpine AS agent-builder
+RUN apk add --no-cache musl-dev
+WORKDIR /src
+COPY Cargo.toml Cargo.lock* ./
+COPY crates/shared-types crates/shared-types
+COPY crates/wsl-bridge crates/wsl-bridge
+COPY crates/core-daemon crates/core-daemon
+COPY crates/guest-agent crates/guest-agent
+RUN cargo build --release --bin guest-agent
+
+# Stage 2: Minimal Alpine RootFS for WSL2
+FROM alpine:latest AS rootfs
+
+RUN apk add --no-cache \
+    docker \
+    docker-cli-compose \
+    containerd \
+    iptables \
+    ip6tables \
+    ca-certificates \
+    util-linux \
+    && rm -rf /var/cache/apk/* /usr/share/man/* /usr/share/doc/* /tmp/*
+
+COPY --from=agent-builder /src/target/release/guest-agent /usr/local/bin/nanodock-agent
+COPY rootfs-builder/rootfs/init.sh /init.sh
+COPY rootfs-builder/rootfs/etc/docker/daemon.json /etc/docker/daemon.json
+
+# Guarantee LF line endings even if checked out with CRLF on Windows
+RUN sed -i 's/\r$//' /init.sh /etc/docker/daemon.json \
+    && chmod +x /init.sh /usr/local/bin/nanodock-agent
