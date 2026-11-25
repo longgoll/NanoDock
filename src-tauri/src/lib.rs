@@ -69,8 +69,14 @@ pub fn run() {
             commands::engine::remove_image,
             commands::engine::prune_images,
             commands::engine::list_volumes,
+            commands::engine::create_volume,
             commands::engine::remove_volume,
             commands::engine::prune_volumes,
+            commands::engine::inspect_container,
+            commands::engine::get_container_stats,
+            commands::engine::run_container,
+            commands::engine::open_container_shell,
+            commands::engine::open_localhost_port,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NanoDock Tauri application");

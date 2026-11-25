@@ -171,6 +171,30 @@ async fn dispatch_request<E: WslExecutor>(
                 },
             }
         }
+        ControlRequest::InspectContainer { id } => {
+            match docker_api::inspect_container(&ctx.transport, &id).await {
+                Ok(info) => ControlResponse::ContainerInspect(info),
+                Err(err) => ControlResponse::Error {
+                    message: err.to_string(),
+                },
+            }
+        }
+        ControlRequest::GetContainerStats { id } => {
+            match docker_api::get_container_stats(&ctx.transport, &id).await {
+                Ok(stats) => ControlResponse::ContainerStats(stats),
+                Err(err) => ControlResponse::Error {
+                    message: err.to_string(),
+                },
+            }
+        }
+        ControlRequest::RunContainer(spec) => {
+            match docker_api::run_container(&ctx.transport, &spec).await {
+                Ok(id) => ControlResponse::ContainerCreated { id },
+                Err(err) => ControlResponse::Error {
+                    message: err.to_string(),
+                },
+            }
+        }
         ControlRequest::ListImages => match docker_api::list_images(&ctx.transport).await {
             Ok(items) => ControlResponse::Images(items),
             Err(err) => ControlResponse::Error {
@@ -205,6 +229,14 @@ async fn dispatch_request<E: WslExecutor>(
                 message: err.to_string(),
             },
         },
+        ControlRequest::CreateVolume { name, driver } => {
+            match docker_api::create_volume(&ctx.transport, &name, driver.as_deref()).await {
+                Ok(()) => ControlResponse::Ack,
+                Err(err) => ControlResponse::Error {
+                    message: err.to_string(),
+                },
+            }
+        }
         ControlRequest::RemoveVolume { name } => {
             match docker_api::remove_volume(&ctx.transport, &name).await {
                 Ok(()) => ControlResponse::Ack,

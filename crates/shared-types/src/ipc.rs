@@ -32,6 +32,10 @@ pub struct ImageSummary {
     pub repo_tags: Vec<String>,
     pub size: i64,
     pub created: i64,
+    #[serde(default)]
+    pub in_use: bool,
+    #[serde(default)]
+    pub used_by: Vec<String>,
 }
 
 /// Summary of a Docker volume returned to the UI/CLI.
@@ -41,6 +45,56 @@ pub struct VolumeSummary {
     pub driver: String,
     pub mountpoint: String,
     pub created_at: Option<String>,
+    #[serde(default)]
+    pub in_use: bool,
+    #[serde(default)]
+    pub used_by: Vec<String>,
+}
+
+/// Mount entry inside a container inspect payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerMount {
+    pub mount_type: String,
+    pub source: String,
+    pub destination: String,
+    pub mode: String,
+}
+
+/// Detailed container inspection payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerInspect {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub state: String,
+    pub status: String,
+    pub created: String,
+    pub restart_policy: String,
+    pub cmd: Vec<String>,
+    pub entrypoint: Vec<String>,
+    pub env: Vec<String>,
+    pub mounts: Vec<ContainerMount>,
+    pub networks: Vec<String>,
+    pub ip_address: String,
+    pub ports: Vec<String>,
+}
+
+/// Live CPU and memory usage snapshot for a running container.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContainerStats {
+    pub id: String,
+    pub cpu_percent: f64,
+    pub mem_usage_bytes: u64,
+    pub mem_limit_bytes: u64,
+}
+
+/// Parameters to create and start a container from an image.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunContainerSpec {
+    pub image: String,
+    pub name: Option<String>,
+    pub ports: Vec<String>,
+    pub env: Vec<String>,
 }
 
 /// Requests sent from the Tauri UI or CLI to `core-daemon` over `\\.\pipe\nanodock_ctl`.
@@ -62,6 +116,13 @@ pub enum ControlRequest {
         id: String,
         tail: Option<usize>,
     },
+    InspectContainer {
+        id: String,
+    },
+    GetContainerStats {
+        id: String,
+    },
+    RunContainer(RunContainerSpec),
     ListImages,
     PullImage {
         reference: String,
@@ -71,6 +132,10 @@ pub enum ControlRequest {
     },
     PruneImages,
     ListVolumes,
+    CreateVolume {
+        name: String,
+        driver: Option<String>,
+    },
     RemoveVolume {
         name: String,
     },
@@ -90,6 +155,11 @@ pub enum ControlResponse {
     Containers(Vec<ContainerSummary>),
     ContainerLogs {
         logs: String,
+    },
+    ContainerInspect(ContainerInspect),
+    ContainerStats(ContainerStats),
+    ContainerCreated {
+        id: String,
     },
     Images(Vec<ImageSummary>),
     Volumes(Vec<VolumeSummary>),

@@ -1,4 +1,6 @@
-use shared_types::{ContainerActionKind, ControlRequest, ControlResponse, EngineConfig};
+use shared_types::{
+    ContainerActionKind, ControlRequest, ControlResponse, EngineConfig, RunContainerSpec,
+};
 
 use crate::daemon_client::send_control_request;
 
@@ -118,4 +120,81 @@ pub async fn prune_volumes() -> Result<ControlResponse, String> {
     send_control_request(ControlRequest::PruneVolumes)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn inspect_container(id: String) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::InspectContainer { id })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_container_stats(id: String) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::GetContainerStats { id })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn run_container(spec: RunContainerSpec) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::RunContainer(spec))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn create_volume(
+    name: String,
+    driver: Option<String>,
+) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::CreateVolume { name, driver })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_container_shell(id: String) -> Result<(), String> {
+    let clean: String = id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if clean.is_empty() {
+        return Err("Invalid container ID".to_string());
+    }
+
+    let script = format!(
+        "docker exec -it {clean} sh -c 'command -v bash >/dev/null && exec bash || exec sh'"
+    );
+    // Prefer Windows Terminal if installed, otherwise fall back to PowerShell.
+    let wt_res = std::process::Command::new("wt.exe")
+        .args(["powershell", "-NoExit", "-Command", &script])
+        .spawn();
+    if wt_res.is_ok() {
+        return Ok(());
+    }
+
+    std::process::Command::new("powershell.exe")
+        .args(["-NoExit", "-Command", &script])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_localhost_port(port: u16) -> Result<(), String> {
+    let url = format!("http://localhost:{port}");
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = url;
+        Err("Only supported on Windows".to_string())
+    }
 }

@@ -35,6 +35,8 @@ export interface ImageSummary {
   repo_tags: string[];
   size: number;
   created: number;
+  in_use: boolean;
+  used_by: string[];
 }
 
 export interface VolumeSummary {
@@ -42,6 +44,46 @@ export interface VolumeSummary {
   driver: string;
   mountpoint: string;
   created_at: string | null;
+  in_use: boolean;
+  used_by: string[];
+}
+
+export interface ContainerMount {
+  mount_type: string;
+  source: string;
+  destination: string;
+  mode: string;
+}
+
+export interface ContainerInspect {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  created: string;
+  restart_policy: string;
+  cmd: string[];
+  entrypoint: string[];
+  env: string[];
+  mounts: ContainerMount[];
+  networks: string[];
+  ip_address: string;
+  ports: string[];
+}
+
+export interface ContainerStats {
+  id: string;
+  cpu_percent: number;
+  mem_usage_bytes: number;
+  mem_limit_bytes: number;
+}
+
+export interface RunContainerSpec {
+  image: string;
+  name: string | null;
+  ports: string[];
+  env: string[];
 }
 
 export type ControlResponse =
@@ -56,6 +98,9 @@ export type ControlResponse =
   | { status: "config"; data: EngineConfig }
   | { status: "containers"; data: ContainerSummary[] }
   | { status: "container_logs"; data: { logs: string } }
+  | { status: "container_inspect"; data: ContainerInspect }
+  | { status: "container_stats"; data: ContainerStats }
+  | { status: "container_created"; data: { id: string } }
   | { status: "images"; data: ImageSummary[] }
   | { status: "volumes"; data: VolumeSummary[] }
   | { status: "prune_result"; data: { reclaimed_bytes: number } }
@@ -79,6 +124,13 @@ export const daemonApi = {
   removeImage: (id: string) => invoke<ControlResponse>("remove_image", { id }),
   pruneImages: () => invoke<ControlResponse>("prune_images"),
   listVolumes: () => invoke<ControlResponse>("list_volumes"),
+  createVolume: (name: string, driver?: string) =>
+    invoke<ControlResponse>("create_volume", { name, driver: driver ?? null }),
   removeVolume: (name: string) => invoke<ControlResponse>("remove_volume", { name }),
   pruneVolumes: () => invoke<ControlResponse>("prune_volumes"),
+  inspectContainer: (id: string) => invoke<ControlResponse>("inspect_container", { id }),
+  getContainerStats: (id: string) => invoke<ControlResponse>("get_container_stats", { id }),
+  runContainer: (spec: RunContainerSpec) => invoke<ControlResponse>("run_container", { spec }),
+  openContainerShell: (id: string) => invoke<void>("open_container_shell", { id }),
+  openLocalhostPort: (port: number) => invoke<void>("open_localhost_port", { port }),
 };
