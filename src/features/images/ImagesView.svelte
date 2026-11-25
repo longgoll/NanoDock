@@ -3,10 +3,12 @@
   import type { ImageSummary } from "../../lib/api/daemon";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import EngineSleepingCard from "../../lib/components/EngineSleepingCard.svelte";
+  import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
   import InUseBadge from "../../lib/components/InUseBadge.svelte";
   import RunContainerModal from "../../lib/components/RunContainerModal.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
+  import Tooltip from "../../lib/components/Tooltip.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import { formatBytes, formatTimestamp } from "../../lib/utils/format";
@@ -160,7 +162,15 @@
   <!-- Header -->
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Images</h2>
+      <div class="flex items-center gap-2">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Images</h2>
+        <HelpTip
+          title="Image Protection &amp; Dangling Layers"
+          align="left"
+          position="bottom"
+          text="Images marked In Use are referenced by at least one container (including stopped ones) and cannot be deleted. <dangling> tags are leftover build layers safe to prune."
+        />
+      </div>
       <p class="text-xs text-slate-500 dark:text-slate-400">
         {totalCount} total ({formatBytes(totalSize)}) · {inUseCount} in use · {unusedCount} unused ({formatBytes(reclaimableSize)} reclaimable)
       </p>
@@ -375,38 +385,41 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      onclick={() => openRunModal(img)}
-                      disabled={engineStore.busy}
-                      title="Run container from this image"
-                      aria-label={`Run container from ${img.repo_tags[0] || img.id}`}
-                      class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
-                    >
-                      <Icon name="play" class="h-4 w-4" />
-                    </button>
-                    {#if img.in_use}
+                    <Tooltip text="Run container from this image">
                       <button
                         type="button"
-                        disabled
-                        title={`Cannot delete: used by ${img.used_by.join(", ")}`}
-                        aria-label={`Image ${img.repo_tags[0] || img.id} is in use`}
-                        class="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-400 opacity-60 dark:border-slate-800 dark:text-slate-500"
-                      >
-                        <Icon name="lock" class="h-3.5 w-3.5" />
-                        In Use
-                      </button>
-                    {:else}
-                      <button
-                        type="button"
-                        onclick={() => confirmDeleteSingle(img)}
+                        onclick={() => openRunModal(img)}
                         disabled={engineStore.busy}
-                        title="Delete unused image"
-                        aria-label={`Delete image ${img.repo_tags[0] || img.id}`}
-                        class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
+                        aria-label={`Run container from ${img.repo_tags[0] || img.id}`}
+                        class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
                       >
-                        <Icon name="trash" class="h-4 w-4" />
+                        <Icon name="play" class="h-4 w-4" />
                       </button>
+                    </Tooltip>
+                    {#if img.in_use}
+                      <Tooltip text={`Cannot delete: used by ${img.used_by.join(", ")}`} align="right">
+                        <button
+                          type="button"
+                          disabled
+                          aria-label={`Image ${img.repo_tags[0] || img.id} is in use`}
+                          class="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-400 opacity-60 dark:border-slate-800 dark:text-slate-500"
+                        >
+                          <Icon name="lock" class="h-3.5 w-3.5" />
+                          In Use
+                        </button>
+                      </Tooltip>
+                    {:else}
+                      <Tooltip text="Delete unused image" align="right">
+                        <button
+                          type="button"
+                          onclick={() => confirmDeleteSingle(img)}
+                          disabled={engineStore.busy}
+                          aria-label={`Delete image ${img.repo_tags[0] || img.id}`}
+                          class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
+                        >
+                          <Icon name="trash" class="h-4 w-4" />
+                        </button>
+                      </Tooltip>
                     {/if}
                   </div>
                 </td>

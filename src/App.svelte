@@ -7,11 +7,13 @@
   import StorageView from "./features/storage/StorageView.svelte";
   import VolumesView from "./features/volumes/VolumesView.svelte";
   import Icon, { type IconName } from "./lib/components/Icon.svelte";
+  import QuickGuideModal from "./lib/components/QuickGuideModal.svelte";
   import { engineStore } from "./lib/stores/engine.svelte";
 
   type Tab = "dashboard" | "containers" | "images" | "volumes" | "storage" | "settings";
   let activeTab = $state<Tab>("dashboard");
   let sidebarCollapsed = $state(false);
+  let quickGuideOpen = $state(false);
 
   const navItems: { id: Tab; label: string; icon: IconName }[] = [
     { id: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -154,6 +156,15 @@
         </div>
         <button
           type="button"
+          onclick={() => (quickGuideOpen = true)}
+          title="Quick Guide"
+          aria-label="Open Quick Guide"
+          class="flex w-full items-center justify-center rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-sky-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-sky-400"
+        >
+          <Icon name="help" class="h-4 w-4" />
+        </button>
+        <button
+          type="button"
           onclick={() => engineStore.toggleTheme()}
           title={engineStore.theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
           aria-label="Toggle theme"
@@ -199,17 +210,28 @@
             {engineStore.autoRefresh ? "ON" : "OFF"}
           </button>
         </div>
-        <button
-          type="button"
-          onclick={() => engineStore.toggleTheme()}
-          class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        >
-          <span>{engineStore.theme === "light" ? "Light Mode" : "Dark Mode"}</span>
-          <Icon
-            name={engineStore.theme === "light" ? "sun" : "moon"}
-            class={`h-4 w-4 ${engineStore.theme === "light" ? "text-amber-500" : "text-sky-400"}`}
-          />
-        </button>
+        <div class="flex items-center gap-1.5">
+          <button
+            type="button"
+            onclick={() => engineStore.toggleTheme()}
+            class="flex flex-1 items-center justify-between rounded-lg px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            <span>{engineStore.theme === "light" ? "Light Mode" : "Dark Mode"}</span>
+            <Icon
+              name={engineStore.theme === "light" ? "sun" : "moon"}
+              class={`h-4 w-4 ${engineStore.theme === "light" ? "text-amber-500" : "text-sky-400"}`}
+            />
+          </button>
+          <button
+            type="button"
+            onclick={() => (quickGuideOpen = true)}
+            title="Quick Guide"
+            aria-label="Open Quick Guide"
+            class="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-sky-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-sky-400"
+          >
+            <Icon name="help" class="h-4 w-4" />
+          </button>
+        </div>
       {/if}
     </div>
   </aside>
@@ -269,3 +291,5 @@
     </div>
   {/if}
 </div>
+
+<QuickGuideModal open={quickGuideOpen} onClose={() => (quickGuideOpen = false)} />

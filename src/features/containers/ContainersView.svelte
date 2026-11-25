@@ -7,9 +7,11 @@
   } from "../../lib/api/daemon";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import EngineSleepingCard from "../../lib/components/EngineSleepingCard.svelte";
+  import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
   import RunContainerModal from "../../lib/components/RunContainerModal.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
+  import Tooltip from "../../lib/components/Tooltip.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import ContainerDetailView, { type DetailTab } from "./ContainerDetailView.svelte";
@@ -310,7 +312,15 @@
   <!-- Header -->
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Containers</h2>
+      <div class="flex items-center gap-2">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Containers</h2>
+        <HelpTip
+          title="Containers &amp; Bind Mounts"
+          align="left"
+          position="bottom"
+          text="Manage running and stopped containers. Windows bind paths (C:\\...) are automatically translated to /mnt/c/... inside WSL2."
+        />
+      </div>
       <p class="text-xs text-slate-500 dark:text-slate-400">
         {runningCount} running · {stoppedCount} stopped · {totalCount} total
       </p>
@@ -341,19 +351,20 @@
           </button>
         {/if}
 
-        <button
-          type="button"
-          onclick={() => (groupByStack = !groupByStack)}
-          class={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-            groupByStack
-              ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-300"
-              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-          }`}
-          title="Toggle Compose stack grouping"
-        >
-          <Icon name="images" class="h-3.5 w-3.5" />
-          Group by Stack
-        </button>
+        <Tooltip text="Group containers by Docker Compose project" position="bottom">
+          <button
+            type="button"
+            onclick={() => (groupByStack = !groupByStack)}
+            class={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              groupByStack
+                ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-300"
+                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            }`}
+          >
+            <Icon name="images" class="h-3.5 w-3.5" />
+            Group by Stack
+          </button>
+        </Tooltip>
 
         <button
           type="button"
@@ -717,75 +728,82 @@
     <td class="px-4 py-3 text-right">
       <div class="inline-flex items-center gap-0.5">
         {#if c.state === "running"}
-          <button
-            type="button"
-            onclick={() => engineStore.runContainerAction(c.id, "stop")}
-            disabled={engineStore.busy}
-            title="Stop container"
-            aria-label={`Stop ${displayName}`}
-            class="rounded-lg p-1.5 text-amber-600 transition hover:bg-amber-50 disabled:opacity-40 dark:text-amber-400 dark:hover:bg-amber-500/15"
-          >
-            <Icon name="stop" class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onclick={() => engineStore.runContainerAction(c.id, "restart")}
-            disabled={engineStore.busy}
-            title="Restart container"
-            aria-label={`Restart ${displayName}`}
-            class="rounded-lg p-1.5 text-sky-600 transition hover:bg-sky-50 disabled:opacity-40 dark:text-sky-400 dark:hover:bg-sky-500/15"
-          >
-            <Icon name="refresh" class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onclick={() => openShell(c.id)}
-            title="Open terminal shell (exec)"
-            aria-label={`Open shell in ${displayName}`}
-            class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
-          >
-            <Icon name="terminal" class="h-4 w-4" />
-          </button>
+          <Tooltip text="Stop container">
+            <button
+              type="button"
+              onclick={() => engineStore.runContainerAction(c.id, "stop")}
+              disabled={engineStore.busy}
+              aria-label={`Stop ${displayName}`}
+              class="rounded-lg p-1.5 text-amber-600 transition hover:bg-amber-50 disabled:opacity-40 dark:text-amber-400 dark:hover:bg-amber-500/15"
+            >
+              <Icon name="stop" class="h-4 w-4" />
+            </button>
+          </Tooltip>
+          <Tooltip text="Restart container">
+            <button
+              type="button"
+              onclick={() => engineStore.runContainerAction(c.id, "restart")}
+              disabled={engineStore.busy}
+              aria-label={`Restart ${displayName}`}
+              class="rounded-lg p-1.5 text-sky-600 transition hover:bg-sky-50 disabled:opacity-40 dark:text-sky-400 dark:hover:bg-sky-500/15"
+            >
+              <Icon name="refresh" class="h-4 w-4" />
+            </button>
+          </Tooltip>
+          <Tooltip text="Open shell (exec)">
+            <button
+              type="button"
+              onclick={() => openShell(c.id)}
+              aria-label={`Open shell in ${displayName}`}
+              class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
+            >
+              <Icon name="terminal" class="h-4 w-4" />
+            </button>
+          </Tooltip>
         {:else}
+          <Tooltip text="Start container">
+            <button
+              type="button"
+              onclick={() => engineStore.runContainerAction(c.id, "start")}
+              disabled={engineStore.busy}
+              aria-label={`Start ${displayName}`}
+              class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
+            >
+              <Icon name="play" class="h-4 w-4" />
+            </button>
+          </Tooltip>
+        {/if}
+        <Tooltip text="View logs">
           <button
             type="button"
-            onclick={() => engineStore.runContainerAction(c.id, "start")}
-            disabled={engineStore.busy}
-            title="Start container"
-            aria-label={`Start ${displayName}`}
-            class="rounded-lg p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-400 dark:hover:bg-emerald-500/15"
+            onclick={() => openDetail(c.id, "logs")}
+            aria-label={`View logs for ${displayName}`}
+            class="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            <Icon name="play" class="h-4 w-4" />
+            <Icon name="logs" class="h-4 w-4" />
           </button>
-        {/if}
-        <button
-          type="button"
-          onclick={() => openDetail(c.id, "logs")}
-          title="View logs"
-          aria-label={`View logs for ${displayName}`}
-          class="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <Icon name="logs" class="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onclick={() => openDetail(c.id, "inspect")}
-          title="Inspect & live stats"
-          aria-label={`Inspect ${displayName}`}
-          class="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <Icon name="info" class="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onclick={() => confirmDeleteSingle(c)}
-          disabled={engineStore.busy}
-          title="Delete container"
-          aria-label={`Delete ${displayName}`}
-          class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
-        >
-          <Icon name="trash" class="h-4 w-4" />
-        </button>
+        </Tooltip>
+        <Tooltip text="Inspect &amp; live stats">
+          <button
+            type="button"
+            onclick={() => openDetail(c.id, "inspect")}
+            aria-label={`Inspect ${displayName}`}
+            class="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Icon name="info" class="h-4 w-4" />
+          </button>
+        </Tooltip>
+        <Tooltip text="Delete container" align="right">
+          <button
+            type="button"
+            onclick={() => confirmDeleteSingle(c)}
+            disabled={engineStore.busy}
+            aria-label={`Delete ${displayName}`}
+            class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
+          >
+            <Icon name="trash" class="h-4 w-4" />
+          </button>
+        </Tooltip>
       </div>
     </td>
   </tr>

@@ -3,9 +3,11 @@
   import type { VolumeSummary } from "../../lib/api/daemon";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import EngineSleepingCard from "../../lib/components/EngineSleepingCard.svelte";
+  import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
   import InUseBadge from "../../lib/components/InUseBadge.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
+  import Tooltip from "../../lib/components/Tooltip.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import { formatIsoDate } from "../../lib/utils/format";
@@ -170,7 +172,15 @@
   <!-- Header -->
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Volumes</h2>
+      <div class="flex items-center gap-2">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Volumes</h2>
+        <HelpTip
+          title="Persistent Volume Data"
+          align="left"
+          position="bottom"
+          text="Volumes store persistent data (databases, app state) independently of container lifecycles. Deleting a volume permanently erases its data."
+        />
+      </div>
       <p class="text-xs text-slate-500 dark:text-slate-400">
         {totalCount} total · {inUseCount} mounted (protected) · {unusedCount} unused
       </p>
@@ -359,27 +369,29 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   {#if vol.in_use}
-                    <button
-                      type="button"
-                      disabled
-                      title={`Cannot delete: mounted by ${vol.used_by.join(", ")}`}
-                      aria-label={`Volume ${vol.name} is in use`}
-                      class="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-400 opacity-60 dark:border-slate-800 dark:text-slate-500"
-                    >
-                      <Icon name="lock" class="h-3.5 w-3.5" />
-                      In Use
-                    </button>
+                    <Tooltip text={`Cannot delete: mounted by ${vol.used_by.join(", ")}`} align="right">
+                      <button
+                        type="button"
+                        disabled
+                        aria-label={`Volume ${vol.name} is in use`}
+                        class="inline-flex cursor-not-allowed items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-400 opacity-60 dark:border-slate-800 dark:text-slate-500"
+                      >
+                        <Icon name="lock" class="h-3.5 w-3.5" />
+                        In Use
+                      </button>
+                    </Tooltip>
                   {:else}
-                    <button
-                      type="button"
-                      onclick={() => confirmDeleteSingle(vol)}
-                      disabled={engineStore.busy}
-                      title="Delete unused volume"
-                      aria-label={`Delete volume ${vol.name}`}
-                      class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
-                    >
-                      <Icon name="trash" class="h-4 w-4" />
-                    </button>
+                    <Tooltip text="Delete unused volume (permanent)" align="right">
+                      <button
+                        type="button"
+                        onclick={() => confirmDeleteSingle(vol)}
+                        disabled={engineStore.busy}
+                        aria-label={`Delete volume ${vol.name}`}
+                        class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
+                      >
+                        <Icon name="trash" class="h-4 w-4" />
+                      </button>
+                    </Tooltip>
                   {/if}
                 </td>
               </tr>

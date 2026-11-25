@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { daemonApi, type EngineConfig } from "../../lib/api/daemon";
+  import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
 
@@ -184,12 +185,19 @@
       </div>
 
       <div>
-        <label
-          for="idle-timeout"
-          class="block text-sm font-medium text-slate-700 dark:text-slate-300"
-        >
-          Auto-Hibernate When Idle
-        </label>
+        <div class="flex items-center gap-1.5">
+          <label
+            for="idle-timeout"
+            class="block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >
+            Auto-Hibernate When Idle
+          </label>
+          <HelpTip
+            title="Graceful Auto-Hibernate"
+            align="left"
+            text="Sends SIGTERM to dockerd and containerd before shutting down WSL2, reaching 0 MB idle RAM without corrupting overlay2 layers."
+          />
+        </div>
         <p class="mt-0.5 text-xs text-slate-400">
           Automatically shuts down the micro-distro to 0 MB RAM when no containers or streams are active
         </p>
@@ -211,15 +219,21 @@
       </div>
 
       <div class="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-        <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            bind:checked={draft.auto_trim_on_events}
-            disabled={!isConnected}
-            class="h-4 w-4 accent-sky-600 disabled:opacity-60"
+        <div class="flex items-center gap-2">
+          <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              bind:checked={draft.auto_trim_on_events}
+              disabled={!isConnected}
+              class="h-4 w-4 accent-sky-600 disabled:opacity-60"
+            />
+            Auto-run fstrim on container/image delete
+          </label>
+          <HelpTip
+            text="Listens to Docker destroy/delete/prune events and runs fstrim after a 5s debounce so your .vhdx file stays compact automatically."
+            label="About auto-trim"
           />
-          Auto-run fstrim on container/image delete
-        </label>
+        </div>
 
         <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
           <input
@@ -242,12 +256,19 @@
 
       <div>
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <label
-            for="ram-range"
-            class="text-sm font-medium text-slate-700 dark:text-slate-300"
-          >
-            WSL2 Memory Limit
-          </label>
+          <div class="flex items-center gap-1.5">
+            <label
+              for="ram-range"
+              class="text-sm font-medium text-slate-700 dark:text-slate-300"
+            >
+              WSL2 Memory Limit
+            </label>
+            <HelpTip
+              align="left"
+              text="Maximum RAM the WSL2 VM is allowed to use. WSL2 allocates memory dynamically and returns unused RAM on hibernate."
+              label="About WSL2 memory limit"
+            />
+          </div>
           <span class="font-mono text-sm font-semibold text-sky-700 dark:text-sky-400">
             {draft.wsl.memory_mb} MB ({formatGb(draft.wsl.memory_mb)})
           </span>
@@ -281,15 +302,19 @@
       </div>
 
       <div>
-        <label
-          for="swap-range"
-          class="flex justify-between text-sm font-medium text-slate-700 dark:text-slate-300"
-        >
-          <span>Swap (Anti-OOM)</span>
+        <div class="flex justify-between text-sm font-medium text-slate-700 dark:text-slate-300">
+          <div class="flex items-center gap-1.5">
+            <label for="swap-range">Swap (Anti-OOM)</label>
+            <HelpTip
+              align="left"
+              text="Disk-backed virtual memory used as a safety buffer if container workloads exceed the RAM limit."
+              label="About Swap"
+            />
+          </div>
           <span class="font-mono font-semibold text-sky-700 dark:text-sky-400">
             {draft.wsl.swap_mb} MB ({formatGb(draft.wsl.swap_mb)})
           </span>
-        </label>
+        </div>
         <input
           id="swap-range"
           type="range"
@@ -303,25 +328,37 @@
       </div>
 
       <div class="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-        <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            bind:checked={draft.wsl.sparse_vhd}
-            disabled={!isConnected}
-            class="h-4 w-4 accent-sky-600 disabled:opacity-60"
+        <div class="flex items-center gap-2">
+          <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              bind:checked={draft.wsl.sparse_vhd}
+              disabled={!isConnected}
+              class="h-4 w-4 accent-sky-600 disabled:opacity-60"
+            />
+            Enable sparse VHD (automatic disk shrinking)
+          </label>
+          <HelpTip
+            text="Enables sparse allocation on the WSL2 virtual disk so fstrim can return freed space to Windows."
+            label="About sparse VHD"
           />
-          Enable sparse VHD (automatic disk shrinking)
-        </label>
+        </div>
 
-        <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            bind:checked={draft.wsl.mirrored_networking}
-            disabled={!isConnected}
-            class="h-4 w-4 accent-sky-600 disabled:opacity-60"
+        <div class="flex items-center gap-2">
+          <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              bind:checked={draft.wsl.mirrored_networking}
+              disabled={!isConnected}
+              class="h-4 w-4 accent-sky-600 disabled:opacity-60"
+            />
+            Enable WSL2 mirrored networking mode
+          </label>
+          <HelpTip
+            text="Mirrors Windows network interfaces into WSL2 for cleaner localhost forwarding and VPN compatibility (requires Windows 11 22H2+)."
+            label="About mirrored networking"
           />
-          Enable WSL2 mirrored networking mode
-        </label>
+        </div>
       </div>
 
       {#if wslDirty && engineStore.state === "running"}

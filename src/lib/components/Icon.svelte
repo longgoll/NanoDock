@@ -28,7 +28,8 @@
     | "plus"
     | "close"
     | "arrow-left"
-    | "activity";
+    | "activity"
+    | "help";
 
   let {
     name,
@@ -363,5 +364,19 @@
     stroke-width="2"
   >
     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </svg>
+{:else if name === "help"}
+  <svg
+    class={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+    <path d="M12 17h.01" />
   </svg>
 {/if}
