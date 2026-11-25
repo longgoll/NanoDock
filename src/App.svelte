@@ -91,8 +91,8 @@
           <button
             type="button"
             onclick={toggleSidebar}
-            title="Collapse sidebar"
-            aria-label="Collapse sidebar"
+            title={i18n.t.nav.collapseSidebar}
+            aria-label={i18n.t.nav.collapseSidebar}
             class="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
             <Icon name="chevron-left" class="h-4 w-4" />
@@ -135,15 +135,15 @@
         <button
           type="button"
           onclick={toggleSidebar}
-          title="Expand sidebar"
-          aria-label="Expand sidebar"
+          title={i18n.t.nav.expandSidebar}
+          aria-label={i18n.t.nav.expandSidebar}
           class="flex w-full items-center justify-center rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         >
           <Icon name="chevron-right" class="h-4 w-4" />
         </button>
         <div
           class="flex justify-center py-1"
-          title={`Engine: ${engineStore.state === "running" ? "Running" : engineStore.state === "stopped" ? "Sleeping" : engineStore.state}`}
+          title={`${i18n.t.nav.engine}: ${engineStore.state === "running" ? i18n.t.nav.running : engineStore.state === "stopped" ? i18n.t.nav.sleeping : engineStore.state}`}
         >
           <span
             class={`h-2.5 w-2.5 rounded-full ${
@@ -158,8 +158,8 @@
         <button
           type="button"
           onclick={() => (quickGuideOpen = true)}
-          title="Quick Guide"
-          aria-label="Open Quick Guide"
+          title={i18n.t.nav.quickGuide}
+          aria-label={i18n.t.nav.quickGuide}
           class="flex w-full items-center justify-center rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-sky-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-sky-400"
         >
           <Icon name="help" class="h-4 w-4" />
@@ -167,7 +167,7 @@
         <button
           type="button"
           onclick={() => engineStore.toggleTheme()}
-          title={engineStore.theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+          title={engineStore.theme === "light" ? i18n.t.nav.switchToDark : i18n.t.nav.switchToLight}
           aria-label="Toggle theme"
           class="flex w-full items-center justify-center rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >

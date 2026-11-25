@@ -450,7 +450,7 @@
     {#if selectedContainers.length > 0}
       <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/90 px-4 py-2.5 dark:border-sky-500/30 dark:bg-sky-500/10">
         <div class="flex items-center gap-2 text-xs font-semibold text-sky-800 dark:text-sky-300">
-          <span>{selectedContainers.length} container{selectedContainers.length === 1 ? "" : "s"} selected</span>
+          <span>{i18n.t.containers.selectedCount(selectedContainers.length)}</span>
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
           <button
@@ -460,7 +460,7 @@
             class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-40"
           >
             <Icon name="play" class="h-3 w-3" />
-            Start
+            {i18n.t.common.start}
           </button>
           <button
             type="button"
@@ -469,7 +469,7 @@
             class="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-amber-500 disabled:opacity-40"
           >
             <Icon name="stop" class="h-3 w-3" />
-            Stop
+            {i18n.t.common.stop}
           </button>
           <button
             type="button"
@@ -477,7 +477,7 @@
             disabled={engineStore.busy || selectedContainers.every((c) => c.state !== "running")}
             class="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           >
-            Restart
+            {i18n.t.common.restart}
           </button>
           <button
             type="button"
@@ -485,14 +485,14 @@
             disabled={engineStore.busy}
             class="inline-flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-rose-500 disabled:opacity-40"
           >
-            Delete
+            {i18n.t.common.delete}
           </button>
           <button
             type="button"
             onclick={() => (selectedIds = new Set())}
             class="ml-1 rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white/70 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Clear
+            {i18n.t.common.clear}
           </button>
         </div>
       </div>
@@ -501,11 +501,11 @@
     <!-- Container Table -->
     {#if filtered.length === 0}
       <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
-        No containers match your filter. Click <strong>Run Container</strong> above or run
+        {i18n.t.containers.emptyHintPrefix} <strong>{i18n.t.containers.runContainer}</strong> {i18n.t.containers.emptyHintMiddle}
         <code class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sky-700 dark:bg-slate-800 dark:text-sky-400">
           nanodock run -d -p 8080:80 nginx:alpine
         </code>
-        to get started.
+        {i18n.t.containers.emptyHintSuffix}
       </div>
     {:else}
       <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
@@ -522,11 +522,11 @@
                   class="h-4 w-4 rounded border-slate-300 accent-sky-600"
                 />
               </th>
-              <th class="px-3 py-3">Name</th>
-              <th class="px-3 py-3">Image</th>
-              <th class="px-3 py-3">Status</th>
-              <th class="px-3 py-3">Ports</th>
-              <th class="px-4 py-3 text-right">Actions</th>
+              <th class="px-3 py-3">{i18n.t.containers.colName}</th>
+              <th class="px-3 py-3">{i18n.t.containers.colImage}</th>
+              <th class="px-3 py-3">{i18n.t.containers.colStatus}</th>
+              <th class="px-3 py-3">{i18n.t.containers.colPorts}</th>
+              <th class="px-4 py-3 text-right">{i18n.t.containers.colActions}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200 dark:divide-slate-800">

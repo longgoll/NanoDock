@@ -8,6 +8,7 @@
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import Icon from "../../lib/components/Icon.svelte";
   import SearchInput from "../../lib/components/SearchInput.svelte";
+  import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import { formatBytes, formatIsoDate } from "../../lib/utils/format";
@@ -337,7 +338,7 @@
           class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-500 disabled:opacity-50"
         >
           <Icon name="stop" class="h-3.5 w-3.5" />
-          Stop
+          {i18n.t.common.stop}
         </button>
         <button
           type="button"
@@ -346,7 +347,7 @@
           class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         >
           <Icon name="refresh" class="h-3.5 w-3.5" />
-          Restart
+          {i18n.t.common.restart}
         </button>
       {:else}
         <button
@@ -356,7 +357,7 @@
           class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
         >
           <Icon name="play" class="h-3.5 w-3.5" />
-          Start
+          {i18n.t.common.start}
         </button>
       {/if}
       <button

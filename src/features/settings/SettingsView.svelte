@@ -108,11 +108,11 @@
         if (restartAfter && engineStore.state !== "stopped") {
           await engineStore.stop();
           await engineStore.start();
-          engineStore.setNotice("Settings saved and WSL2 engine restarted.");
+          engineStore.setNotice(i18n.t.notices.settingsSavedRestarted);
         } else if (wslChanged && engineStore.state === "running") {
-          engineStore.setNotice("Settings saved. Restart the engine to apply WSL2 memory/network changes.");
+          engineStore.setNotice(i18n.t.notices.settingsSavedWslRestart);
         } else {
-          engineStore.setNotice("Settings saved.");
+          engineStore.setNotice(i18n.t.notices.settingsSaved);
         }
       } else if (resp.status === "error") {
         engineStore.error = resp.data.message;

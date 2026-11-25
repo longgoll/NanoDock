@@ -174,16 +174,16 @@
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <div class="flex items-center gap-2">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Volumes</h2>
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">{i18n.t.volumes.title}</h2>
         <HelpTip
-          title="Persistent Volume Data"
+          title={i18n.t.volumes.helpTitle}
           align="left"
           position="bottom"
-          text="Volumes store persistent data (databases, app state) independently of container lifecycles. Deleting a volume permanently erases its data."
+          text={i18n.t.volumes.helpText}
         />
       </div>
       <p class="text-xs text-slate-500 dark:text-slate-400">
-        {totalCount} total · {inUseCount} mounted (protected) · {unusedCount} unused
+        {i18n.t.volumes.summary(totalCount, inUseCount, unusedCount)}
       </p>
     </div>
 
@@ -196,7 +196,7 @@
           class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
         >
           <Icon name="plus" class="h-3.5 w-3.5" />
-          Create Volume
+          {i18n.t.volumes.createVolume}
         </button>
         {#if unusedCount > 0}
           <button
@@ -206,7 +206,7 @@
             class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300"
           >
             <Icon name="trash" class="h-3.5 w-3.5" />
-            Prune Unused ({unusedCount})
+            {i18n.t.volumes.pruneUnused(unusedCount)}
           </button>
         {/if}
         <button
@@ -219,14 +219,14 @@
             name="refresh"
             class={`h-3.5 w-3.5 ${engineStore.loadingResources ? "animate-spin" : ""}`}
           />
-          Refresh
+          {i18n.t.common.refresh}
         </button>
       </div>
     {/if}
   </div>
 
   {#if engineStore.state === "stopped"}
-    <EngineSleepingCard resourceLabel="volumes" />
+    <EngineSleepingCard resourceLabel={i18n.t.volumes.resourceLabel} />
   {:else}
     <!-- Filter & Search Bar -->
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -240,7 +240,7 @@
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          All ({totalCount})
+          {i18n.t.common.all} ({totalCount})
         </button>
         <button
           type="button"
@@ -251,7 +251,7 @@
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          In Use ({inUseCount})
+          {i18n.t.common.inUse} ({inUseCount})
         </button>
         <button
           type="button"
@@ -262,18 +262,18 @@
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          Unused ({unusedCount})
+          {i18n.t.common.unused} ({unusedCount})
         </button>
       </div>
 
-      <SearchInput bind:value={query} placeholder="Filter by name, container..." />
+      <SearchInput bind:value={query} placeholder={i18n.t.volumes.searchPlaceholder} />
     </div>
 
     <!-- Bulk Action Bar -->
     {#if selectedVolumes.length > 0}
       <div class="flex items-center justify-between rounded-xl border border-sky-200 bg-sky-50/90 px-4 py-2.5 dark:border-sky-500/30 dark:bg-sky-500/10">
         <span class="text-xs font-semibold text-sky-800 dark:text-sky-300">
-          {selectedVolumes.length} unused volume{selectedVolumes.length === 1 ? "" : "s"} selected
+          {i18n.t.volumes.selectedCount(selectedVolumes.length)}
         </span>
         <div class="flex items-center gap-2">
           <button
@@ -282,14 +282,14 @@
             disabled={engineStore.busy}
             class="rounded-md bg-rose-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-rose-500 disabled:opacity-50"
           >
-            Delete Selected
+            {i18n.t.common.deleteSelected}
           </button>
           <button
             type="button"
             onclick={() => (selectedNames = new Set())}
             class="rounded-md px-2 py-1 text-xs font-medium text-slate-600 hover:bg-white/70 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Clear
+            {i18n.t.common.clear}
           </button>
         </div>
       </div>
@@ -298,7 +298,7 @@
     <!-- Volumes Table -->
     {#if filtered.length === 0}
       <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
-        No volumes found. Create one above or run
+        {i18n.t.volumes.emptyPrefix}
         <code class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sky-700 dark:bg-slate-800 dark:text-sky-400">
           nanodock volume create mydata
         </code>.
@@ -319,12 +319,12 @@
                   class="h-4 w-4 rounded border-slate-300 accent-sky-600 disabled:opacity-40"
                 />
               </th>
-              <th class="px-3 py-3">Name</th>
-              <th class="px-3 py-3">Status</th>
-              <th class="px-3 py-3">Driver</th>
-              <th class="px-3 py-3">Mountpoint</th>
-              <th class="px-3 py-3">Created</th>
-              <th class="px-4 py-3 text-right">Actions</th>
+              <th class="px-3 py-3">{i18n.t.volumes.colName}</th>
+              <th class="px-3 py-3">{i18n.t.volumes.colStatus}</th>
+              <th class="px-3 py-3">{i18n.t.volumes.colDriver}</th>
+              <th class="px-3 py-3">{i18n.t.volumes.colMountpoint}</th>
+              <th class="px-3 py-3">{i18n.t.volumes.colCreated}</th>
+              <th class="px-4 py-3 text-right">{i18n.t.volumes.colActions}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
@@ -418,11 +418,11 @@
       onsubmit={handleCreateVolume}
       class="w-full max-w-sm space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
     >
-      <h3 class="text-base font-semibold text-slate-900 dark:text-white">Create Volume</h3>
+      <h3 class="text-base font-semibold text-slate-900 dark:text-white">{i18n.t.modals.createVolumeTitle}</h3>
 
       <div>
         <label for="vol-name" class="block text-xs font-medium text-slate-700 dark:text-slate-300">
-          Volume Name
+          {i18n.t.modals.createVolumeName}
         </label>
         <input
           id="vol-name"
@@ -437,7 +437,7 @@
 
       <div>
         <label for="vol-driver" class="block text-xs font-medium text-slate-700 dark:text-slate-300">
-          Driver
+          {i18n.t.modals.createVolumeDriver}
         </label>
         <input
           id="vol-driver"
@@ -454,14 +454,14 @@
           disabled={engineStore.busy}
           class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         >
-          Cancel
+          {i18n.t.common.cancel}
         </button>
         <button
           type="submit"
           disabled={engineStore.busy || !newVolumeName.trim()}
           class="rounded-lg bg-sky-600 px-4 py-2 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
         >
-          {engineStore.busy ? "Creating..." : "Create"}
+          {engineStore.busy ? i18n.t.modals.creating : i18n.t.volumes.createVolume}
         </button>
       </div>
     </form>

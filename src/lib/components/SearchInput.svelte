@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { i18n } from "../i18n/index.svelte";
   import Icon from "./Icon.svelte";
 
   let {
@@ -29,8 +30,8 @@
       type="button"
       onclick={() => (value = "")}
       class="absolute top-1/2 right-2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-      title="Clear filter"
-      aria-label="Clear filter"
+      title={i18n.t.nav.clearFilter}
+      aria-label={i18n.t.nav.clearFilter}
     >
       <Icon name="close" class="h-3.5 w-3.5" />
     </button>

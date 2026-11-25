@@ -1,3 +1,4 @@
+import { i18n } from "../i18n/index.svelte";
 import {
   daemonApi,
   type ContainerActionKind,
@@ -227,7 +228,7 @@ class EngineStore {
     try {
       const resp = await daemonApi.pullImage(reference);
       if (!this.handleError(resp)) {
-        this.setNotice(`Pulled ${reference}`);
+        this.setNotice(i18n.t.notices.pulledImage(reference));
         await this.refreshImages(true);
         return true;
       }
@@ -246,7 +247,7 @@ class EngineStore {
     try {
       const resp = await daemonApi.runContainer(spec);
       if (resp.status === "container_created") {
-        this.setNotice(`Started container ${resp.data.id} from ${spec.image}`);
+        this.setNotice(i18n.t.notices.startedContainer(resp.data.id, spec.image));
         await Promise.all([this.refreshContainers(true), this.refreshImages(true), this.refresh()]);
         return true;
       }
@@ -265,7 +266,7 @@ class EngineStore {
     try {
       const resp = await daemonApi.removeImage(id);
       if (!this.handleError(resp)) {
-        this.setNotice("Image deleted.");
+        this.setNotice(i18n.t.notices.imageDeleted);
         await this.refreshImages();
       }
     } catch (e) {
@@ -280,8 +281,8 @@ class EngineStore {
       ids,
       (id) => daemonApi.removeImage(id),
       () => this.refreshImages(),
-      (n) => `Deleted ${n} image${n === 1 ? "" : "s"}.`,
-      (n, total, err) => `Deleted ${n}/${total} images. Error: ${err}`,
+      (n) => i18n.t.notices.imagesDeletedBatch(n),
+      (n, total, err) => i18n.t.notices.imagesDeletedBatchError(n, total, err),
     );
   }
 
@@ -292,7 +293,7 @@ class EngineStore {
       const resp = await daemonApi.pruneImages();
       if (resp.status === "prune_result") {
         const mb = (resp.data.reclaimed_bytes / (1024 * 1024)).toFixed(1);
-        this.setNotice(`Pruned unused images (${mb} MB reclaimed)`);
+        this.setNotice(i18n.t.notices.imagesPruned(mb));
         await this.refreshImages();
       } else {
         this.handleError(resp);
@@ -328,7 +329,7 @@ class EngineStore {
     try {
       const resp = await daemonApi.createVolume(name, driver);
       if (!this.handleError(resp)) {
-        this.setNotice(`Volume "${name}" created.`);
+        this.setNotice(i18n.t.notices.volumeCreated(name));
         await this.refreshVolumes();
         return true;
       }
@@ -346,7 +347,7 @@ class EngineStore {
     try {
       const resp = await daemonApi.removeVolume(name);
       if (!this.handleError(resp)) {
-        this.setNotice(`Volume "${name}" deleted.`);
+        this.setNotice(i18n.t.notices.volumeDeleted(name));
         await this.refreshVolumes();
       }
     } catch (e) {
@@ -361,8 +362,8 @@ class EngineStore {
       names,
       (name) => daemonApi.removeVolume(name),
       () => this.refreshVolumes(),
-      (n) => `Deleted ${n} volume${n === 1 ? "" : "s"}.`,
-      (n, total, err) => `Deleted ${n}/${total} volumes. Error: ${err}`,
+      (n) => i18n.t.notices.volumesDeletedBatch(n),
+      (n, total, err) => i18n.t.notices.volumesDeletedBatchError(n, total, err),
     );
   }
 
@@ -373,7 +374,7 @@ class EngineStore {
       const resp = await daemonApi.pruneVolumes();
       if (resp.status === "prune_result") {
         const mb = (resp.data.reclaimed_bytes / (1024 * 1024)).toFixed(1);
-        this.setNotice(`Pruned unused volumes (${mb} MB reclaimed)`);
+        this.setNotice(i18n.t.notices.volumesPruned(mb));
         await this.refreshVolumes();
       } else {
         this.handleError(resp);
@@ -419,7 +420,7 @@ class EngineStore {
     try {
       const resp = await daemonApi.trimDisk();
       if (!this.handleError(resp)) {
-        this.setNotice("Virtual disk trimmed successfully.");
+        this.setNotice(i18n.t.notices.diskTrimmed);
       }
       await this.refresh();
     } finally {
