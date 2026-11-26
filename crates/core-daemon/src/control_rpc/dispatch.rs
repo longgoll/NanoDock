@@ -54,9 +54,12 @@ pub(super) async fn dispatch_request<E: WslExecutor>(
                     ctx.set_state(EngineState::Stopped).await;
                     ControlResponse::Ack
                 }
-                Err(err) => ControlResponse::Error {
-                    message: err.to_string(),
-                },
+                Err(err) => {
+                    ctx.set_state(EngineState::Error).await;
+                    ControlResponse::Error {
+                        message: err.to_string(),
+                    }
+                }
             }
         }
         ControlRequest::ShutdownDaemon => {
@@ -116,7 +119,7 @@ pub(super) async fn dispatch_request<E: WslExecutor>(
             let dockerd_log = if *ctx.state.read().await == EngineState::Running {
                 let distro = ctx.config.read().await.distro_name.clone();
                 let n = lines.max(1);
-                let cmd = format!("tail -n {n} /var/log/dockerd.log 2>/dev/null || true");
+                let cmd = format!("tail -n {n} /var/log/nanodock/dockerd.log 2>/dev/null || true");
                 ctx.wsl
                     .run(&["-d", &distro, "-e", "sh", "-c", &cmd])
                     .await

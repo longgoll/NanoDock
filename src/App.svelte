@@ -50,8 +50,6 @@
     const syncAll = () => {
       if (document.hidden || !engineStore.autoRefresh || engineStore.busy) return;
       void engineStore.refreshAll(true);
-    void updaterStore.checkForUpdates(true);
-    void environmentStore.refresh();
     };
 
     const timer = setInterval(syncAll, 5000);

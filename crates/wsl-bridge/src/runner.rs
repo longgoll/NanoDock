@@ -11,7 +11,14 @@ pub struct SystemWslExecutor;
 #[async_trait]
 impl WslExecutor for SystemWslExecutor {
     async fn run(&self, args: &[&str]) -> Result<CommandOutput, WslError> {
-        let output = Command::new("wsl.exe").args(args).output().await?;
+        let mut cmd = Command::new("wsl.exe");
+        cmd.args(args);
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let output = cmd.output().await?;
         Ok(CommandOutput {
             success: output.status.success(),
             exit_code: output.status.code(),

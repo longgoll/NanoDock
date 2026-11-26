@@ -62,12 +62,18 @@ pub struct YamuxStdioTransport {
 
 impl YamuxStdioTransport {
     pub fn spawn(distro_name: &str) -> anyhow::Result<Self> {
-        let mut child: Child = Command::new("wsl.exe")
-            .args(["-d", distro_name, "-e", "/usr/local/bin/nanodock-agent"])
+        let mut cmd = Command::new("wsl.exe");
+        cmd.args(["-d", distro_name, "-e", "/usr/local/bin/nanodock-agent"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
-            .kill_on_drop(true)
+            .kill_on_drop(true);
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let mut child: Child = cmd
             .spawn()
             .context("failed to spawn wsl.exe nanodock-agent")?;
 

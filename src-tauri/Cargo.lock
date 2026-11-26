@@ -2079,7 +2079,7 @@ dependencies = [
 
 [[package]]
 name = "nanodock-ui"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -3316,7 +3316,7 @@ dependencies = [
 
 [[package]]
 name = "shared-types"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -5069,7 +5069,7 @@ dependencies = [
 
 [[package]]
 name = "wsl-bridge"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "async-trait",
  "serde_json",

@@ -5,6 +5,16 @@ All notable changes to NanoDock will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-26
+
+### Fixed
+- **Auto-Wake State Sync:** Sync `EngineState::Running` and emit `DaemonEvent::StateChanged` when `TransportManager` wakes the WSL2 distro on incoming Docker Named Pipe traffic, ensuring Auto-Hibernate and Docker event watchers activate properly.
+- **Engine Logs Path & Stop Error State:** Fixed `GetEngineLogs` reading `/var/log/nanodock/dockerd.log` (matching `init.sh`), and transitioned `StopEngine` to `EngineState::Error` if `graceful_hibernate` fails.
+- **WSL2 Process & Distro Safety:** Added `CREATE_NO_WINDOW` when spawning `wsl.exe` in `SystemWslExecutor` and `YamuxStdioTransport`, and skipped inspecting stopped WSL2 distros in `list_user_wsl_distros` to avoid booting idle distributions.
+- **IPC Resilience & HTTP Timeout:** Added `ERROR_PIPE_BUSY` retry in Tauri `daemon_client`, a 300s timeout on `docker_http_json_request`, and allowed `.` in container names for `open_container_shell`.
+- **UI Polling Optimization:** Removed `updaterStore.checkForUpdates` and `environmentStore.refresh` from the 5-second `syncAll` loop in `App.svelte` so only engine/resource state polls every 5 seconds.
+- **Chunked Proxy Translation & Modularization:** Added `Transfer-Encoding: chunked` support for Windows bind-mount path translation in `POST /containers/create`, coalesced concurrent `/containers/json?all=1` lookups across `list_images` and `list_volumes` with a 2s TTL cache, and split `docker_api` into focused submodules.
+
 ## [0.7.0] - 2026-11-26
 
 ### Added

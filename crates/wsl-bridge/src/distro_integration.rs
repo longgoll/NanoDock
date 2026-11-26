@@ -60,7 +60,8 @@ pub async fn list_user_wsl_distros<E: WslExecutor>(
 
     let mut distros = parse_wsl_list_verbose(&out.stdout, nanodock_distro);
     for distro in &mut distros {
-        if distro.version != 2 {
+        // Avoid booting stopped WSL2 distributions just to inspect profile scripts.
+        if distro.version != 2 || !distro.state.eq_ignore_ascii_case("Running") {
             continue;
         }
         let check = exec
@@ -81,7 +82,7 @@ pub async fn list_user_wsl_distros<E: WslExecutor>(
 }
 
 /// Enables or disables `DOCKER_HOST=unix:///mnt/wsl/nanodock/docker.sock` inside a target WSL2
-/// distribution by managing `/etc/profile.d/nanodock.sh` and symlinking `docker` if missing.
+/// distribution by managing `/etc/profile.d/nanodock.sh`.
 pub async fn set_distro_docker_integration<E: WslExecutor>(
     exec: &E,
     distro: &str,

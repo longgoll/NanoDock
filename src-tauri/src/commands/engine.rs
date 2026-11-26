@@ -193,7 +193,7 @@ pub async fn create_volume(
 pub fn open_container_shell(id: String) -> Result<(), String> {
     let clean: String = id
         .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
         .collect();
     if clean.is_empty() {
         return Err("Invalid container ID".to_string());

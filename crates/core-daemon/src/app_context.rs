@@ -16,7 +16,7 @@ pub struct AppContext<E: WslExecutor> {
     pub config: RwLock<EngineConfig>,
     pub config_path: PathBuf,
     pub wslconfig_path: Option<PathBuf>,
-    pub state: RwLock<EngineState>,
+    pub state: Arc<RwLock<EngineState>>,
     pub wsl: Arc<E>,
     pub startup: Arc<dyn StartupManager>,
     pub transport: Arc<TransportManager<E>>,
@@ -43,16 +43,19 @@ impl<E: WslExecutor> AppContext<E> {
         wsl: Arc<E>,
         startup: Arc<dyn StartupManager>,
     ) -> Arc<Self> {
-        let transport = Arc::new(TransportManager::new(
+        let state = Arc::new(RwLock::new(EngineState::Stopped));
+        let (events, _) = broadcast::channel(64);
+        let transport = Arc::new(TransportManager::with_state_tracker(
             Arc::clone(&wsl),
             config.distro_name.clone(),
+            Arc::clone(&state),
+            events.clone(),
         ));
-        let (events, _) = broadcast::channel(64);
         Arc::new(Self {
             config: RwLock::new(config),
             config_path,
             wslconfig_path,
-            state: RwLock::new(EngineState::Stopped),
+            state,
             wsl,
             startup,
             transport,
