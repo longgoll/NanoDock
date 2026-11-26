@@ -12,6 +12,7 @@
   import QuickGuideModal from "./lib/components/QuickGuideModal.svelte";
   import { i18n } from "./lib/i18n/index.svelte";
   import { engineStore } from "./lib/stores/engine.svelte";
+  import { updaterStore } from "./lib/stores/updater.svelte";
 
   type Tab = "dashboard" | "containers" | "images" | "volumes" | "networks" | "storage" | "settings";
   let activeTab = $state<Tab>("dashboard");
@@ -42,10 +43,12 @@
       });
 
     void engineStore.refreshAll(true);
+    void updaterStore.checkForUpdates(true);
 
     const syncAll = () => {
       if (document.hidden || !engineStore.autoRefresh || engineStore.busy) return;
       void engineStore.refreshAll(true);
+    void updaterStore.checkForUpdates(true);
     };
 
     const timer = setInterval(syncAll, 5000);
@@ -265,6 +268,42 @@
         class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-sky-500/15"
       >
         <div class="h-full w-1/3 animate-pulse bg-sky-500"></div>
+      </div>
+    {/if}
+    {#if updaterStore.availableVersion && !updaterStore.dismissed}
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/80 px-4 py-2.5 text-xs text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+        <div class="flex items-center gap-2.5">
+          <Icon name="info" class="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+          <span class="font-medium">
+            {i18n.t.settings.updateAvailable(updaterStore.availableVersion)}
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            onclick={() => void updaterStore.installUpdate()}
+            disabled={updaterStore.downloading || updaterStore.installing}
+            class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-60"
+          >
+            {#if updaterStore.downloading || updaterStore.installing}
+              <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+            {/if}
+            {updaterStore.installing
+              ? i18n.t.settings.installingUpdate
+              : updaterStore.downloading
+                ? i18n.t.settings.downloadingUpdate(updaterStore.progress)
+                : i18n.t.settings.updateNow}
+          </button>
+          {#if !updaterStore.downloading && !updaterStore.installing}
+            <button
+              type="button"
+              onclick={() => updaterStore.dismissBanner()}
+              class="rounded-lg px-2 py-1 text-sky-700 transition hover:bg-sky-100 dark:text-sky-300 dark:hover:bg-sky-500/20"
+            >
+              {i18n.t.settings.later}
+            </button>
+          {/if}
+        </div>
       </div>
     {/if}
     {#if activeTab === "dashboard"}

@@ -268,6 +268,18 @@ export const vi: Translations = {
     saveAndRestart: "Lưu & Khởi động lại Engine",
     reset: "Hoàn tác",
     restoreDefaults: "Khôi phục mặc định",
+    updateTitle: "Cập nhật ứng dụng",
+    updateDesc: "Kiểm tra phiên bản NanoDock mới từ GitHub Releases",
+    currentVersion: "Phiên bản hiện tại",
+    checkForUpdates: "Kiểm tra cập nhật",
+    checkingUpdates: "Đang kiểm tra...",
+    upToDate: "Bạn đang dùng phiên bản mới nhất.",
+    updateAvailable: (v: string) => `Đã có phiên bản mới v${v}`,
+    updateNow: "Cập nhật & Khởi động lại",
+    downloadingUpdate: (pct: number | null) =>
+      pct !== null ? `Đang tải (${pct}%)...` : "Đang tải...",
+    installingUpdate: "Đang cài đặt bản cập nhật...",
+    later: "Để sau",
   },
   notices: {
     settingsSavedRestarted: "Đã lưu cài đặt và khởi động lại WSL2 engine.",

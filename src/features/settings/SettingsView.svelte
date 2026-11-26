@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getVersion } from "@tauri-apps/api/app";
   import { onMount } from "svelte";
   import { daemonApi, type EngineConfig } from "../../lib/api/daemon";
   import HelpTip from "../../lib/components/HelpTip.svelte";
@@ -6,6 +7,7 @@
   import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import { i18n, type LocalePreference } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
+  import { updaterStore } from "../../lib/stores/updater.svelte";
 
   const DEFAULT_CONFIG: EngineConfig = {
     distro_name: "nanodock",
@@ -23,6 +25,7 @@
   let saving = $state(false);
   let savingRestart = $state(false);
   let loading = $state(false);
+  let appVersion = $state<string | null>(null);
   let draft = $state<EngineConfig>(cloneConfig(DEFAULT_CONFIG));
 
   const idleOptions = $derived<{ value: number | null; label: string }[]>([
@@ -56,6 +59,13 @@
   }
 
   onMount(() => {
+    void getVersion()
+      .then((v) => {
+        appVersion = v;
+      })
+      .catch(() => {
+        appVersion = null;
+      });
     if (engineStore.config) {
       draft = cloneConfig(engineStore.config);
     }
@@ -182,6 +192,88 @@
         </button>
       {/each}
     </div>
+  </div>
+
+  <!-- Application Updates -->
+  <div class="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-semibold text-slate-900 dark:text-white">
+            {i18n.t.settings.updateTitle}
+          </h3>
+          {#if appVersion}
+            <span class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              v{appVersion}
+            </span>
+          {/if}
+        </div>
+        <p class="text-xs text-slate-400">
+          {i18n.t.settings.updateDesc}
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onclick={() => void updaterStore.checkForUpdates(false)}
+          disabled={updaterStore.checking || updaterStore.downloading || updaterStore.installing}
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+        >
+          {#if updaterStore.checking}
+            <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+          {/if}
+          {updaterStore.checking ? i18n.t.settings.checkingUpdates : i18n.t.settings.checkForUpdates}
+        </button>
+
+        {#if updaterStore.availableVersion}
+          <button
+            type="button"
+            onclick={() => void updaterStore.installUpdate()}
+            disabled={updaterStore.downloading || updaterStore.installing}
+            class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-60"
+          >
+            {#if updaterStore.downloading || updaterStore.installing}
+              <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+            {/if}
+            {updaterStore.installing
+              ? i18n.t.settings.installingUpdate
+              : updaterStore.downloading
+                ? i18n.t.settings.downloadingUpdate(updaterStore.progress)
+                : i18n.t.settings.updateNow}
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    {#if updaterStore.availableVersion}
+      <div class="rounded-xl border border-sky-200/80 bg-sky-50/70 px-3.5 py-2.5 text-xs text-sky-900 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-200">
+        <p class="font-medium">{i18n.t.settings.updateAvailable(updaterStore.availableVersion)}</p>
+        {#if updaterStore.releaseNotes}
+          <p class="mt-1 whitespace-pre-line text-[11px] text-sky-800/90 dark:text-sky-300/90">
+            {updaterStore.releaseNotes}
+          </p>
+        {/if}
+        {#if updaterStore.downloading && updaterStore.progress !== null}
+          <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-sky-200 dark:bg-sky-900">
+            <div
+              class="h-full bg-sky-600 transition-all duration-150 dark:bg-sky-400"
+              style={`width: ${updaterStore.progress}%`}
+            ></div>
+          </div>
+        {/if}
+      </div>
+    {:else if updaterStore.upToDateChecked}
+      <p class="text-xs text-emerald-600 dark:text-emerald-400">
+        {i18n.t.settings.upToDate}
+      </p>
+    {/if}
+
+    {#if updaterStore.error}
+      <p class="text-xs text-rose-600 dark:text-rose-400">
+        {updaterStore.error}
+      </p>
+    {/if}
   </div>
 
   {#if !isConnected}

@@ -266,6 +266,18 @@ export const en = {
     saveAndRestart: "Save & Restart Engine",
     reset: "Reset",
     restoreDefaults: "Restore Defaults",
+    updateTitle: "Application Updates",
+    updateDesc: "Check for new NanoDock releases from GitHub",
+    currentVersion: "Current version",
+    checkForUpdates: "Check for Updates",
+    checkingUpdates: "Checking...",
+    upToDate: "You are on the latest version.",
+    updateAvailable: (v: string) => `Version v${v} is available`,
+    updateNow: "Update & Restart",
+    downloadingUpdate: (pct: number | null) =>
+      pct !== null ? `Downloading (${pct}%)...` : "Downloading...",
+    installingUpdate: "Installing update...",
+    later: "Later",
   },
   notices: {
     settingsSavedRestarted: "Settings saved and WSL2 engine restarted.",

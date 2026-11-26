@@ -62,8 +62,35 @@ jobs:
         shell: pwsh
         run: .\bundle.ps1
 
-      - name: Build NSIS installer
-        run: pnpm tauri build --bundles nsis
+      - name: Build NSIS installer & updater artifacts
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm exec tauri build --bundles nsis --config src-tauri/tauri.bundle.conf.json
+
+      - name: Generate latest.json for Tauri updater
+        shell: pwsh
+        run: |
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          $exe = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" | Select-Object -First 1
+          $sig = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe.sig" | Select-Object -First 1
+          if (-not $exe -or -not $sig) {
+            throw "Missing NSIS installer or .sig file in $nsisDir"
+          }
+          $version = (Get-Content "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json).version
+          $manifest = @{
+            version = $version
+            notes = "NanoDock v$version"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = (Get-Content $sig.FullName -Raw).Trim()
+                url = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$($exe.Name)"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -Path "$nsisDir/latest.json" -Encoding UTF8
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -71,3 +98,5 @@ jobs:
           files: |
             NanoDock-portable-windows-x64.zip
             src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe.sig
+            src-tauri/target/release/bundle/nsis/latest.json

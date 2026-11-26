@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "resources": {
+      "../target/release/core-daemon.exe": "core-daemon.exe",
+      "../target/release/nanodock.exe": "nanodock.exe",
+      "../rootfs-builder/out/micro-distro.tar.gz": "micro-distro.tar.gz"
+    }
+  }
+}

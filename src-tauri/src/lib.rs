@@ -14,6 +14,46 @@ use crate::tray::{setup_tray, AllowExit};
 
 struct DaemonChild(Mutex<Option<Child>>);
 
+/// Gracefully shuts down `core-daemon.exe` (whether spawned by this UI or running externally)
+/// and waits briefly for the child process to exit so installer updates do not hit locked files.
+async fn shutdown_daemon_process(app_handle: &tauri::AppHandle) {
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(8),
+        daemon_client::send_control_request(shared_types::ControlRequest::ShutdownDaemon),
+    )
+    .await;
+
+    if let Some(state) = app_handle.try_state::<Arc<DaemonChild>>() {
+        if let Ok(mut guard) = state.0.lock() {
+            if let Some(mut child) = guard.take() {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(_)) => break,
+                        Ok(None) if std::time::Instant::now() < deadline => {
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
+                        _ => {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[tauri::command]
+async fn prepare_for_update(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(flag) = app_handle.try_state::<AllowExit>() {
+        flag.0.store(true, Ordering::SeqCst);
+    }
+    shutdown_daemon_process(&app_handle).await;
+    Ok(())
+}
+
 fn spawn_daemon_if_needed() -> Option<Child> {
     // Skip spawning if core-daemon is already listening on the control pipe.
     if std::fs::metadata(r"\\.\pipe\nanodock_ctl").is_ok() {
@@ -42,6 +82,8 @@ pub fn run() {
     let daemon_for_setup = Arc::clone(&daemon_child);
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AllowExit(Arc::clone(&allow_exit)))
         .manage(daemon_child)
         .setup(move |app| {
@@ -81,6 +123,7 @@ pub fn run() {
             commands::engine::run_container,
             commands::engine::open_container_shell,
             commands::engine::open_localhost_port,
+            prepare_for_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NanoDock Tauri application");
@@ -96,36 +139,7 @@ pub fn run() {
             }
         }
         RunEvent::Exit => {
-            if let Some(state) = app_handle.try_state::<Arc<DaemonChild>>() {
-                if let Ok(mut guard) = state.0.lock() {
-                    if let Some(mut child) = guard.take() {
-                        let _ = tauri::async_runtime::block_on(async {
-                            tokio::time::timeout(
-                                std::time::Duration::from_secs(8),
-                                daemon_client::send_control_request(
-                                    shared_types::ControlRequest::ShutdownDaemon,
-                                ),
-                            )
-                            .await
-                        });
-                        let deadline =
-                            std::time::Instant::now() + std::time::Duration::from_secs(2);
-                        loop {
-                            match child.try_wait() {
-                                Ok(Some(_)) => break,
-                                Ok(None) if std::time::Instant::now() < deadline => {
-                                    std::thread::sleep(std::time::Duration::from_millis(100));
-                                }
-                                _ => {
-                                    let _ = child.kill();
-                                    let _ = child.wait();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            tauri::async_runtime::block_on(shutdown_daemon_process(app_handle));
         }
         _ => {}
     });
