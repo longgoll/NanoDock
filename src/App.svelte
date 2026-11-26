@@ -276,7 +276,7 @@
     {#if environmentStore.status && !environmentStore.bannerDismissed && (!environmentStore.status.wsl_installed || environmentStore.status.creds_store_warning)}
       <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
         <div class="flex items-center gap-2.5">
-          <Icon name="alert" class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <Icon name="warning" class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <span class="font-medium">
             {!environmentStore.status.wsl_installed
               ? i18n.t.settings.envBannerWslMissing
