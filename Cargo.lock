@@ -54,7 +54,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
 name = "core-daemon"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "guest-agent"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -264,12 +264,13 @@ dependencies = [
 
 [[package]]
 name = "nanodock-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "serde_json",
  "shared-types",
  "tokio",
+ "wsl-bridge",
 ]
 
 [[package]]
@@ -496,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "shared-types"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -800,7 +801,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wsl-bridge"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "serde_json",

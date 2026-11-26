@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { ImageSummary } from "../../lib/api/daemon";
+  import { daemonApi, type ImageLayer, type ImageSummary } from "../../lib/api/daemon";
+  import ImageLayersModal from "./ImageLayersModal.svelte";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import EngineSleepingCard from "../../lib/components/EngineSleepingCard.svelte";
   import HelpTip from "../../lib/components/HelpTip.svelte";
@@ -28,6 +29,27 @@
   // Run container modal state
   let runModalOpen = $state(false);
   let runImageRef = $state("");
+
+  // Inspect layers modal state
+  let layersModalOpen = $state(false);
+  let layersImageName = $state("");
+  let imageLayers = $state<ImageLayer[]>([]);
+  let layersLoading = $state(false);
+
+  async function openLayersModal(img: ImageSummary) {
+    layersImageName = img.repo_tags[0] || img.id;
+    layersModalOpen = true;
+    layersLoading = true;
+    imageLayers = [];
+    try {
+      const resp = await daemonApi.inspectImageLayers(img.id);
+      if (resp.status === "image_layers") {
+        imageLayers = resp.data;
+      }
+    } finally {
+      layersLoading = false;
+    }
+  }
 
   onMount(() => {
     void engineStore.refreshImages(engineStore.images.length > 0);
@@ -388,6 +410,16 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="inline-flex items-center gap-1">
+                    <Tooltip text={i18n.t.extra.inspectLayers}>
+                      <button
+                        type="button"
+                        onclick={() => openLayersModal(img)}
+                        class="rounded-lg p-1.5 text-sky-600 transition hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-500/15"
+                        aria-label={`Inspect layers for ${img.repo_tags[0] || img.id}`}
+                      >
+                        <Icon name="images" class="h-4 w-4" />
+                      </button>
+                    </Tooltip>
                     <Tooltip text={i18n.t.images.runTooltip}>
                       <button
                         type="button"
@@ -442,6 +474,14 @@
   open={runModalOpen}
   initialImage={runImageRef}
   onClose={() => (runModalOpen = false)}
+/>
+
+<ImageLayersModal
+  open={layersModalOpen}
+  imageName={layersImageName}
+  layers={imageLayers}
+  loading={layersLoading}
+  onClose={() => (layersModalOpen = false)}
 />
 
 <ConfirmModal

@@ -7,7 +7,7 @@ pub use config::{EngineConfig, WslConfigSpec};
 pub use error::SharedError;
 pub use events::{DaemonEvent, EngineState};
 pub use ipc::{
-    ContainerActionKind, ContainerInspect, ContainerMount, ContainerStats, ContainerSummary,
-    ControlRequest, ControlResponse, ImageSummary, NetworkSummary, RunContainerSpec,
-    VolumeSummary,
+    ContainerActionKind, ContainerFileEntry, ContainerInspect, ContainerMount, ContainerStats,
+    ContainerSummary, ControlRequest, ControlResponse, EngineMetrics, ImageLayer, ImageSummary,
+    NetworkSummary, RunContainerSpec, VolumeSummary, WslDistroInfo,
 };

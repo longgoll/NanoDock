@@ -63,9 +63,54 @@ pub fn fix_user_docker_creds_store(user_profile: &Path) -> std::io::Result<bool>
     Ok(true)
 }
 
+/// Checks whether `docker-credential-wincred.exe` is available on `PATH`.
+pub fn detect_wincred_available() -> bool {
+    let Some(path_var) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path_var).any(|dir| dir.join("docker-credential-wincred.exe").is_file())
+}
+
+/// Updates raw Docker config JSON to use `"credsStore": "wincred"`.
+pub fn set_wincred_creds_store_content(json_str: &str) -> Option<String> {
+    let mut val: Value = if json_str.trim().is_empty() {
+        serde_json::json!({})
+    } else {
+        serde_json::from_str(json_str).ok()?
+    };
+    let obj = val.as_object_mut()?;
+    obj.insert("credsStore".to_string(), Value::String("wincred".to_string()));
+    serde_json::to_string_pretty(&val).ok()
+}
+
+/// Configures `%USERPROFILE%\.docker\config.json` to use `credsStore: "wincred"` (creating a
+/// `.bak` backup if the file already existed).
+pub fn set_user_docker_wincred(user_profile: &Path) -> std::io::Result<bool> {
+    let docker_dir = user_profile.join(".docker");
+    let config_path = docker_dir.join("config.json");
+    let existing = if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path)?;
+        let backup_path = docker_dir.join("config.json.bak");
+        std::fs::copy(&config_path, &backup_path)?;
+        content
+    } else {
+        std::fs::create_dir_all(&docker_dir)?;
+        "{}".to_string()
+    };
+
+    let Some(updated) = set_wincred_creds_store_content(&existing) else {
+        return Ok(false);
+    };
+    std::fs::write(&config_path, format!("{updated}\n"))?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{check_creds_store_content, remove_desktop_creds_store_content};
+    use super::{
+        check_creds_store_content, remove_desktop_creds_store_content,
+        set_wincred_creds_store_content,
+    };
 
     #[test]
     fn detects_desktop_creds_store() {
@@ -85,6 +130,14 @@ mod tests {
         let raw = r#"{"auths":{"ghcr.io":{}},"credsStore":"desktop"}"#;
         let updated = remove_desktop_creds_store_content(raw).expect("should remove");
         assert!(check_creds_store_content(&updated).is_none());
+        assert!(updated.contains("ghcr.io"));
+    }
+
+    #[test]
+    fn sets_wincred_creds_store_preserving_auths() {
+        let raw = r#"{"auths":{"ghcr.io":{}},"credsStore":"desktop"}"#;
+        let updated = set_wincred_creds_store_content(raw).expect("should update");
+        assert!(updated.contains(r#""credsStore": "wincred""#));
         assert!(updated.contains("ghcr.io"));
     }
 }

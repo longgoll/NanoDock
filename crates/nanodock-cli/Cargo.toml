@@ -12,4 +12,5 @@ path = "src/main.rs"
 anyhow.workspace = true
 serde_json.workspace = true
 shared-types = { path = "../shared-types" }
+wsl-bridge = { path = "../wsl-bridge" }
 tokio.workspace = true

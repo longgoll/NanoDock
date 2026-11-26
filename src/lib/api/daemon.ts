@@ -96,6 +96,43 @@ export interface RunContainerSpec {
   env: string[];
 }
 
+export interface ImageLayer {
+  id: string;
+  created: number;
+  created_by: string;
+  size: number;
+  comment: string;
+}
+
+export interface ContainerFileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  mode: string;
+  modified: number;
+}
+
+export interface WslDistroInfo {
+  name: string;
+  state: string;
+  version: number;
+  is_default: boolean;
+  integrated: boolean;
+}
+
+export interface EngineMetrics {
+  hibernate_count: number;
+  total_reclaimed_bytes: number;
+  uptime_secs: number;
+}
+
+export interface DoctorCheckItem {
+  name: string;
+  level: "ok" | "warn" | "fail";
+  detail: string;
+}
+
 export interface EnvironmentStatus {
   wsl_installed: boolean;
   wsl_status_detail: string;
@@ -105,6 +142,7 @@ export interface EnvironmentStatus {
   docker_shim_active: boolean;
   external_docker_path: string | null;
   creds_store_warning: string | null;
+  wincred_available: boolean;
 }
 
 export type ControlResponse =
@@ -117,12 +155,22 @@ export type ControlResponse =
       };
     }
   | { status: "config"; data: EngineConfig }
+  | { status: "engine_logs"; data: { daemon_log: string; dockerd_log: string } }
+  | { status: "engine_metrics"; data: EngineMetrics }
+  | { status: "wsl_distros"; data: WslDistroInfo[] }
   | { status: "containers"; data: ContainerSummary[] }
   | { status: "container_logs"; data: { logs: string } }
   | { status: "container_inspect"; data: ContainerInspect }
   | { status: "container_stats"; data: ContainerStats }
+  | { status: "exec_output"; data: { exit_code: number; output: string } }
+  | { status: "container_files"; data: ContainerFileEntry[] }
+  | {
+      status: "container_file_content";
+      data: { path: string; content: string; truncated: boolean };
+    }
   | { status: "container_created"; data: { id: string } }
   | { status: "images"; data: ImageSummary[] }
+  | { status: "image_layers"; data: ImageLayer[] }
   | { status: "volumes"; data: VolumeSummary[] }
   | { status: "networks"; data: NetworkSummary[] }
   | { status: "prune_result"; data: { reclaimed_bytes: number } }
@@ -160,6 +208,22 @@ export const daemonApi = {
   runContainer: (spec: RunContainerSpec) => invoke<ControlResponse>("run_container", { spec }),
   openContainerShell: (id: string) => invoke<void>("open_container_shell", { id }),
   openLocalhostPort: (port: number) => invoke<void>("open_localhost_port", { port }),
+  execContainer: (id: string, command: string[]) =>
+    invoke<ControlResponse>("exec_container", { id, command }),
+  listContainerFiles: (id: string, path: string) =>
+    invoke<ControlResponse>("list_container_files", { id, path }),
+  readContainerFile: (id: string, path: string) =>
+    invoke<ControlResponse>("read_container_file", { id, path }),
+  inspectImageLayers: (id: string) => invoke<ControlResponse>("inspect_image_layers", { id }),
+  exportVolume: (name: string, destPath: string) =>
+    invoke<ControlResponse>("export_volume", { name, destPath }),
+  importVolume: (name: string, srcPath: string) =>
+    invoke<ControlResponse>("import_volume", { name, srcPath }),
+  getEngineLogs: (lines = 150) => invoke<ControlResponse>("get_engine_logs", { lines }),
+  getEngineMetrics: () => invoke<ControlResponse>("get_engine_metrics"),
+  listWslDistros: () => invoke<ControlResponse>("list_wsl_distros"),
+  setWslDistroIntegration: (distro: string, enabled: boolean) =>
+    invoke<ControlResponse>("set_wsl_distro_integration", { distro, enabled }),
 };
 
 export const systemApi = {
@@ -170,4 +234,8 @@ export const systemApi = {
   setDockerCliShim: (enabled: boolean) =>
     invoke<EnvironmentStatus>("set_docker_cli_shim", { enabled }),
   fixDockerCredsStore: () => invoke<EnvironmentStatus>("fix_docker_creds_store"),
+  setWincredCredsStore: () => invoke<EnvironmentStatus>("set_wincred_creds_store"),
+  runDoctorChecks: () => invoke<DoctorCheckItem[]>("run_doctor_checks"),
+  pickArchiveFile: (mode: "save" | "open", defaultName: string) =>
+    invoke<string | null>("pick_archive_file", { mode, defaultName }),
 };

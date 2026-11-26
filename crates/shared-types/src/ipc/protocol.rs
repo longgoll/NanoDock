@@ -2,115 +2,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{config::EngineConfig, events::EngineState};
 
-/// Action to perform on a container.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ContainerActionKind {
-    Start,
-    Stop,
-    Restart,
-    Remove,
-}
-
-/// Summary of a Docker container returned to the UI/CLI.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContainerSummary {
-    pub id: String,
-    pub names: Vec<String>,
-    pub image: String,
-    pub state: String,
-    pub status: String,
-    pub created: i64,
-    pub ports: Vec<String>,
-    pub compose_project: Option<String>,
-}
-
-/// Summary of a Docker image returned to the UI/CLI.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ImageSummary {
-    pub id: String,
-    pub repo_tags: Vec<String>,
-    pub size: i64,
-    pub created: i64,
-    #[serde(default)]
-    pub in_use: bool,
-    #[serde(default)]
-    pub used_by: Vec<String>,
-}
-
-/// Summary of a Docker volume returned to the UI/CLI.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VolumeSummary {
-    pub name: String,
-    pub driver: String,
-    pub mountpoint: String,
-    pub created_at: Option<String>,
-    #[serde(default)]
-    pub in_use: bool,
-    #[serde(default)]
-    pub used_by: Vec<String>,
-}
-
-/// Summary of a Docker network returned to the UI/CLI.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NetworkSummary {
-    pub id: String,
-    pub name: String,
-    pub driver: String,
-    pub scope: String,
-    #[serde(default)]
-    pub internal: bool,
-    #[serde(default)]
-    pub in_use: bool,
-    #[serde(default)]
-    pub used_by: Vec<String>,
-}
-
-/// Mount entry inside a container inspect payload.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContainerMount {
-    pub mount_type: String,
-    pub source: String,
-    pub destination: String,
-    pub mode: String,
-}
-
-/// Detailed container inspection payload.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContainerInspect {
-    pub id: String,
-    pub name: String,
-    pub image: String,
-    pub state: String,
-    pub status: String,
-    pub created: String,
-    pub restart_policy: String,
-    pub cmd: Vec<String>,
-    pub entrypoint: Vec<String>,
-    pub env: Vec<String>,
-    pub mounts: Vec<ContainerMount>,
-    pub networks: Vec<String>,
-    pub ip_address: String,
-    pub ports: Vec<String>,
-}
-
-/// Live CPU and memory usage snapshot for a running container.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ContainerStats {
-    pub id: String,
-    pub cpu_percent: f64,
-    pub mem_usage_bytes: u64,
-    pub mem_limit_bytes: u64,
-}
-
-/// Parameters to create and start a container from an image.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RunContainerSpec {
-    pub image: String,
-    pub name: Option<String>,
-    pub ports: Vec<String>,
-    pub env: Vec<String>,
-}
+use super::models::{
+    ContainerActionKind, ContainerFileEntry, ContainerInspect, ContainerStats, ContainerSummary,
+    EngineMetrics, ImageLayer, ImageSummary, NetworkSummary, RunContainerSpec, VolumeSummary,
+    WslDistroInfo,
+};
 
 /// Requests sent from the Tauri UI or CLI to `core-daemon` over `\\.\pipe\nanodock_ctl`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,6 +19,15 @@ pub enum ControlRequest {
     TrimDisk,
     GetConfig,
     UpdateConfig(EngineConfig),
+    GetEngineLogs {
+        lines: usize,
+    },
+    GetEngineMetrics,
+    ListWslDistros,
+    SetWslDistroIntegration {
+        distro: String,
+        enabled: bool,
+    },
     ListContainers,
     ContainerAction {
         id: String,
@@ -138,6 +43,18 @@ pub enum ControlRequest {
     GetContainerStats {
         id: String,
     },
+    ExecContainer {
+        id: String,
+        command: Vec<String>,
+    },
+    ListContainerFiles {
+        id: String,
+        path: String,
+    },
+    ReadContainerFile {
+        id: String,
+        path: String,
+    },
     RunContainer(RunContainerSpec),
     ListImages,
     PullImage {
@@ -147,6 +64,9 @@ pub enum ControlRequest {
         id: String,
     },
     PruneImages,
+    InspectImageLayers {
+        id: String,
+    },
     ListVolumes,
     CreateVolume {
         name: String,
@@ -156,6 +76,14 @@ pub enum ControlRequest {
         name: String,
     },
     PruneVolumes,
+    ExportVolume {
+        name: String,
+        dest_path: String,
+    },
+    ImportVolume {
+        name: String,
+        src_path: String,
+    },
     ListNetworks,
     CreateNetwork {
         name: String,
@@ -179,16 +107,33 @@ pub enum ControlResponse {
         vhdx_size_bytes: Option<u64>,
     },
     Config(EngineConfig),
+    EngineLogs {
+        daemon_log: String,
+        dockerd_log: String,
+    },
+    EngineMetrics(EngineMetrics),
+    WslDistros(Vec<WslDistroInfo>),
     Containers(Vec<ContainerSummary>),
     ContainerLogs {
         logs: String,
     },
     ContainerInspect(ContainerInspect),
     ContainerStats(ContainerStats),
+    ExecOutput {
+        exit_code: i64,
+        output: String,
+    },
+    ContainerFiles(Vec<ContainerFileEntry>),
+    ContainerFileContent {
+        path: String,
+        content: String,
+        truncated: bool,
+    },
     ContainerCreated {
         id: String,
     },
     Images(Vec<ImageSummary>),
+    ImageLayers(Vec<ImageLayer>),
     Volumes(Vec<VolumeSummary>),
     Networks(Vec<NetworkSummary>),
     PruneResult {

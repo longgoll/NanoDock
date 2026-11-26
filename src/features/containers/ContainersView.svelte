@@ -195,6 +195,33 @@
     await engineStore.runContainersBatch(targetIds, action, `group:${group.name}`);
   }
 
+  let stackLogsOpen = $state(false);
+  let stackLogsTitle = $state("");
+  let stackLogsText = $state("");
+  let stackLogsLoading = $state(false);
+
+  async function openStackLogs(group: ContainerGroup) {
+    stackLogsTitle = group.name;
+    stackLogsOpen = true;
+    stackLogsLoading = true;
+    stackLogsText = "";
+    try {
+      const results = await Promise.all(
+        group.items.map(async (c) => {
+          const cname = c.names[0] || c.id;
+          const res = await daemonApi.getContainerLogs(c.id, 80);
+          if (res.status === "container_logs") {
+            return `=== ${cname} ===\n${res.data.logs.trim()}`;
+          }
+          return `=== ${cname} ===\n(no logs)`;
+        }),
+      );
+      stackLogsText = results.join("\n\n");
+    } finally {
+      stackLogsLoading = false;
+    }
+  }
+
   async function runSelectedAction(action: ContainerActionKind) {
     const targetIds = filterTargetIds(selectedContainers, action);
     if (targetIds.length === 0) return;
@@ -617,6 +644,23 @@
                     >
                       {i18n.t.common.restart}
                     </button>
+                    <button
+                      type="button"
+                      onclick={() => openStackLogs(group)}
+                      title={i18n.t.extra.composeLogs}
+                      class="rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-sky-700 transition hover:bg-sky-50 dark:border-slate-700 dark:bg-slate-900 dark:text-sky-400 dark:hover:bg-sky-500/10"
+                    >
+                      {i18n.t.extra.composeLogs}
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => runGroupAction(group, "remove")}
+                      disabled={engineStore.busy}
+                      title={i18n.t.extra.composeDown}
+                      class="rounded border border-rose-200 bg-white px-2 py-1 text-[11px] font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-40 dark:border-rose-500/30 dark:bg-slate-900 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                    >
+                      {i18n.t.extra.composeDown}
+                    </button>
                   </div>
                 </td>
                 <td class="px-4 py-2.5 text-right">
@@ -898,4 +942,42 @@
   onConfirm={confirmState.execute}
   onCancel={confirmState.cancel}
 />
+
+{#if stackLogsOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+  <div
+    onclick={(e) => {
+      if (e.target === e.currentTarget) stackLogsOpen = false;
+    }}
+    onkeydown={(e) => {
+      if (e.key === "Escape") stackLogsOpen = false;
+    }}
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    aria-label={`${stackLogsTitle} — ${i18n.t.extra.composeLogs}`}
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
+  >
+    <div class="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3.5 dark:border-slate-800">
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">{stackLogsTitle} — {i18n.t.extra.composeLogs}</h3>
+        <button
+          type="button"
+          onclick={() => (stackLogsOpen = false)}
+          aria-label={i18n.t.common.cancel}
+          class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        >
+          <Icon name="close" class="h-4 w-4" />
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-5">
+        {#if stackLogsLoading}
+          <p class="text-xs text-slate-500 dark:text-slate-400">{i18n.t.common.loading}</p>
+        {:else}
+          <pre class="max-h-[65vh] overflow-y-auto rounded-lg border border-slate-200 bg-slate-950 p-3.5 whitespace-pre-wrap break-all font-mono text-xs text-slate-200 dark:border-slate-800">{stackLogsText || "(empty)"}</pre>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
 {/if}

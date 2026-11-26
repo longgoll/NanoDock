@@ -31,6 +31,8 @@
     | "arrow-left"
     | "activity"
     | "help"
+    | "folder"
+    | "file"
     | "spinner";
 
   let {
@@ -396,6 +398,27 @@
     <rect x="9" y="2" width="6" height="6" rx="1" />
     <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" />
     <path d="M12 12V8" />
+  </svg>
+{:else if name === "folder"}
+  <svg
+    class={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+  >
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+  </svg>
+{:else if name === "file"}
+  <svg
+    class={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+  >
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
   </svg>
 {:else if name === "spinner"}
   <svg

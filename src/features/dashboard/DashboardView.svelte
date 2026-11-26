@@ -5,15 +5,19 @@
   import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import StatusBadge from "../../lib/components/StatusBadge.svelte";
   import Tooltip from "../../lib/components/Tooltip.svelte";
+  import { daemonApi, type EngineMetrics } from "../../lib/api/daemon";
   import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { formatBytes } from "../../lib/utils/format";
+  import DiagnosticsModal from "../settings/DiagnosticsModal.svelte";
 
   type NavTarget = "containers" | "images" | "volumes" | "storage";
 
   let { onNavigate }: { onNavigate?: (tab: NavTarget) => void } = $props();
 
   let copiedKey = $state<"pipe" | "cli" | null>(null);
+  let metrics = $state<EngineMetrics | null>(null);
+  let diagnosticsOpen = $state(false);
 
   const isStopped = $derived(engineStore.state === "stopped");
 
@@ -21,6 +25,9 @@
     if (!engineStore.config) {
       void engineStore.loadConfig();
     }
+    void daemonApi.getEngineMetrics().then((res) => {
+      if (res.status === "engine_metrics") metrics = res.data;
+    }).catch(() => {});
   });
 
   async function copyText(key: "pipe" | "cli", text: string) {
@@ -275,4 +282,45 @@
       </Tooltip>
     </div>
   </div>
+
+  <!-- Resource Savings & Diagnostics -->
+  <div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/40">
+    <div class="flex flex-wrap items-center gap-6">
+      <div>
+        <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+          {i18n.t.extra.hibernateCount}
+        </p>
+        <p class="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+          {metrics?.hibernate_count ?? 0}
+        </p>
+      </div>
+      <div>
+        <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+          {i18n.t.extra.reclaimedDisk}
+        </p>
+        <p class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">
+          {formatBytes(metrics?.total_reclaimed_bytes ?? 0)}
+        </p>
+      </div>
+      <div>
+        <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+          {i18n.t.extra.uptime}
+        </p>
+        <p class="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+          {metrics ? `${Math.floor(metrics.uptime_secs / 60)}m` : "—"}
+        </p>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onclick={() => (diagnosticsOpen = true)}
+      class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+    >
+      <Icon name="activity" class="h-3.5 w-3.5 text-sky-500" />
+      {i18n.t.extra.runDoctor}
+    </button>
+  </div>
 </section>
+
+<DiagnosticsModal open={diagnosticsOpen} onClose={() => (diagnosticsOpen = false)} />

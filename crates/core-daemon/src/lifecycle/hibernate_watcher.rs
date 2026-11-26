@@ -58,6 +58,7 @@ pub async fn run_hibernate_watcher<E: WslExecutor + 'static>(ctx: Arc<AppContext
                                 warn!(error = %err, "Graceful hibernate failed");
                                 ctx.set_state(EngineState::Error).await;
                             } else {
+                                ctx.hibernate_count.fetch_add(1, Ordering::Relaxed);
                                 ctx.set_state(EngineState::Stopped).await;
                             }
                             idle_since = None;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { VolumeSummary } from "../../lib/api/daemon";
+  import { daemonApi, systemApi, type VolumeSummary } from "../../lib/api/daemon";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import EngineSleepingCard from "../../lib/components/EngineSleepingCard.svelte";
   import HelpTip from "../../lib/components/HelpTip.svelte";
@@ -28,6 +28,46 @@
   let newVolumeName = $state("");
   let newVolumeDriver = $state("local");
   let volumeNameInput = $state<HTMLInputElement | null>(null);
+  let archiveBusy = $state<string | null>(null);
+  let archiveMessage = $state<{ ok: boolean; text: string } | null>(null);
+
+  async function handleExportVolume(name: string) {
+    const dest = await systemApi.pickArchiveFile("save", `${name}.tar.gz`);
+    if (!dest) return;
+    archiveBusy = `export:${name}`;
+    archiveMessage = null;
+    try {
+      const resp = await daemonApi.exportVolume(name, dest);
+      if (resp.status === "ack") {
+        archiveMessage = { ok: true, text: `${i18n.t.extra.volumeExported} ${dest}` };
+      } else if (resp.status === "error") {
+        archiveMessage = { ok: false, text: resp.data.message };
+      }
+    } catch (e) {
+      archiveMessage = { ok: false, text: e instanceof Error ? e.message : String(e) };
+    } finally {
+      archiveBusy = null;
+    }
+  }
+
+  async function handleImportVolume(name: string) {
+    const src = await systemApi.pickArchiveFile("open", `${name}.tar.gz`);
+    if (!src) return;
+    archiveBusy = `import:${name}`;
+    archiveMessage = null;
+    try {
+      const resp = await daemonApi.importVolume(name, src);
+      if (resp.status === "ack") {
+        archiveMessage = { ok: true, text: `${i18n.t.extra.volumeImported} ${src}` };
+      } else if (resp.status === "error") {
+        archiveMessage = { ok: false, text: resp.data.message };
+      }
+    } catch (e) {
+      archiveMessage = { ok: false, text: e instanceof Error ? e.message : String(e) };
+    } finally {
+      archiveBusy = null;
+    }
+  }
 
   onMount(() => {
     void engineStore.refreshVolumes(engineStore.volumes.length > 0);
@@ -221,6 +261,26 @@
     {/if}
   </div>
 
+  {#if archiveMessage}
+    <div
+      class={`flex items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-xs ${
+        archiveMessage.ok
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+          : "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+      }`}
+    >
+      <span class="break-all">{archiveMessage.text}</span>
+      <button
+        type="button"
+        onclick={() => (archiveMessage = null)}
+        aria-label={i18n.t.common.cancel}
+        class="shrink-0 rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+      >
+        <Icon name="close" class="h-3.5 w-3.5" />
+      </button>
+    </div>
+  {/if}
+
   {#if engineStore.state === "stopped"}
     <EngineSleepingCard resourceLabel={i18n.t.volumes.resourceLabel} />
   {:else}
@@ -368,6 +428,23 @@
                   {formatIsoDate(vol.created_at)}
                 </td>
                 <td class="px-4 py-3 text-right">
+                  <div class="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onclick={() => handleExportVolume(vol.name)}
+                      disabled={archiveBusy !== null || engineStore.busy}
+                      class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      {i18n.t.extra.exportVolume}
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => handleImportVolume(vol.name)}
+                      disabled={archiveBusy !== null || engineStore.busy}
+                      class="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      {i18n.t.extra.importVolume}
+                    </button>
                   {#if vol.in_use}
                     <Tooltip text={i18n.t.volumes.lockedTooltip(vol.used_by.join(", "))} align="right">
                       <button
@@ -396,6 +473,7 @@
                       </button>
                     </Tooltip>
                   {/if}
+                  </div>
                 </td>
               </tr>
             {/each}

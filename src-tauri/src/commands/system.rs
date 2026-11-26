@@ -13,6 +13,7 @@ pub struct EnvironmentStatus {
     pub docker_shim_active: bool,
     pub external_docker_path: Option<String>,
     pub creds_store_warning: Option<String>,
+    pub wincred_available: bool,
 }
 
 fn hidden_command(program: &str) -> Command {
@@ -170,6 +171,7 @@ pub fn collect_environment_status() -> Result<EnvironmentStatus, String> {
         .map(PathBuf::from)
         .and_then(|profile| wsl_bridge::check_user_docker_config(&profile))
         .map(|w| w.message);
+    let wincred_available = wsl_bridge::detect_wincred_available();
 
     Ok(EnvironmentStatus {
         wsl_installed,
@@ -180,6 +182,7 @@ pub fn collect_environment_status() -> Result<EnvironmentStatus, String> {
         docker_shim_active,
         external_docker_path,
         creds_store_warning,
+        wincred_available,
     })
 }
 

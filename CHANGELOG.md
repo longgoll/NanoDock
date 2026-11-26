@@ -5,6 +5,15 @@ All notable changes to NanoDock will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-26
+
+### Added
+- **CLI Diagnostics, Logs & Completions:** Added `nanodock doctor`, `nanodock logs [lines]`, and `nanodock completions <powershell|bash|zsh>` in `nanodock-cli`.
+- **Container Terminal & File Browser:** Added interactive **Terminal** (`ExecContainer`) and **Files** (`ListContainerFiles`, `ReadContainerFile`) tabs in `ContainerDetailView`.
+- **Compose Stack Logs & Down + Quick Templates:** Added inline **Stack Logs** and **Down** actions on Compose project headers, plus quick container templates (Postgres, Redis, MySQL, Nginx, Mailpit) in `RunContainerModal`.
+- **Image Layer Inspector & Volume Archive Backup:** Added **Image Layers** modal (`InspectImageLayers`) in `ImagesView` and `.tar.gz` **Export / Import** (`ExportVolume`, `ImportVolume`) in `VolumesView`.
+- **WSL2 Distro Integration, Resource Profiles & Diagnostics UI:** Added 1-click WSL2 distro `DOCKER_HOST` integration, *Eco / Balanced / Performance* resource presets, `wincred` helper option, `core-daemon.log` + `dockerd.log` viewer, and resource-saving metrics (`hibernate_count`, `total_reclaimed_bytes`) on the Dashboard.
+
 ## [0.6.0] - 2026-11-26
 
 ### Added

@@ -1,8 +1,9 @@
 use std::path::PathBuf;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
-use shared_types::{DaemonEvent, EngineConfig, EngineState};
+use shared_types::{DaemonEvent, EngineConfig, EngineMetrics, EngineState};
 use tokio::sync::{broadcast, RwLock};
 use tokio_util::sync::CancellationToken;
 use wsl_bridge::WslExecutor;
@@ -20,6 +21,9 @@ pub struct AppContext<E: WslExecutor> {
     pub startup: Arc<dyn StartupManager>,
     pub transport: Arc<TransportManager<E>>,
     pub active_streams: Arc<AtomicUsize>,
+    pub hibernate_count: Arc<AtomicU64>,
+    pub total_reclaimed_bytes: Arc<AtomicU64>,
+    pub started_at: Instant,
     pub shutdown: CancellationToken,
     pub events: broadcast::Sender<DaemonEvent>,
 }
@@ -53,9 +57,20 @@ impl<E: WslExecutor> AppContext<E> {
             startup,
             transport,
             active_streams: Arc::new(AtomicUsize::new(0)),
+            hibernate_count: Arc::new(AtomicU64::new(0)),
+            total_reclaimed_bytes: Arc::new(AtomicU64::new(0)),
+            started_at: Instant::now(),
             shutdown: CancellationToken::new(),
             events,
         })
+    }
+
+    pub fn metrics(&self) -> EngineMetrics {
+        EngineMetrics {
+            hibernate_count: self.hibernate_count.load(Ordering::Relaxed),
+            total_reclaimed_bytes: self.total_reclaimed_bytes.load(Ordering::Relaxed),
+            uptime_secs: self.started_at.elapsed().as_secs(),
+        }
     }
 
     pub async fn set_state(&self, next: EngineState) {

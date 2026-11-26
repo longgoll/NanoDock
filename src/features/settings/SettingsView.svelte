@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getVersion } from "@tauri-apps/api/app";
   import { onMount } from "svelte";
-  import { daemonApi, type EngineConfig } from "../../lib/api/daemon";
+  import { daemonApi, systemApi, type EngineConfig, type WslDistroInfo } from "../../lib/api/daemon";
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
   import RefreshButton from "../../lib/components/RefreshButton.svelte";
@@ -9,6 +9,7 @@
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { environmentStore } from "../../lib/stores/environment.svelte";
   import { updaterStore } from "../../lib/stores/updater.svelte";
+  import DiagnosticsModal from "./DiagnosticsModal.svelte";
 
   const DEFAULT_CONFIG: EngineConfig = {
     distro_name: "nanodock",
@@ -28,6 +29,61 @@
   let loading = $state(false);
   let appVersion = $state<string | null>(null);
   let draft = $state<EngineConfig>(cloneConfig(DEFAULT_CONFIG));
+  let wslDistros = $state<WslDistroInfo[]>([]);
+  let distroBusy = $state<string | null>(null);
+  let diagnosticsOpen = $state(false);
+
+  async function refreshWslDistros() {
+    try {
+      const res = await daemonApi.listWslDistros();
+      if (res.status === "wsl_distros") {
+        wslDistros = res.data;
+      }
+    } catch {
+      // ignore when daemon is offline
+    }
+  }
+
+  async function toggleDistroIntegration(distro: WslDistroInfo) {
+    distroBusy = distro.name;
+    try {
+      const res = await daemonApi.setWslDistroIntegration(distro.name, !distro.integrated);
+      if (res.status === "ack") {
+        await refreshWslDistros();
+      }
+    } finally {
+      distroBusy = null;
+    }
+  }
+
+  function applyResourceProfile(profile: "eco" | "balanced" | "perf") {
+    if (profile === "eco") {
+      draft.wsl.memory_mb = 2048;
+      draft.wsl.swap_mb = 2048;
+      draft.idle_timeout_secs = 180;
+    } else if (profile === "balanced") {
+      draft.wsl.memory_mb = 4096;
+      draft.wsl.swap_mb = 4096;
+      draft.idle_timeout_secs = 300;
+    } else {
+      draft.wsl.memory_mb = 8192;
+      draft.wsl.swap_mb = 4096;
+      draft.idle_timeout_secs = 900;
+    }
+  }
+
+  const activeProfile = $derived.by(() => {
+    if (draft.wsl.memory_mb === 2048 && draft.wsl.swap_mb === 2048 && draft.idle_timeout_secs === 180) {
+      return "eco";
+    }
+    if (draft.wsl.memory_mb === 4096 && draft.wsl.swap_mb === 4096 && draft.idle_timeout_secs === 300) {
+      return "balanced";
+    }
+    if (draft.wsl.memory_mb === 8192 && draft.wsl.swap_mb === 4096 && draft.idle_timeout_secs === 900) {
+      return "perf";
+    }
+    return null;
+  });
 
   const idleOptions = $derived<{ value: number | null; label: string }[]>([
     { value: null, label: i18n.t.settings.idleNever },
@@ -72,6 +128,7 @@
     }
     void load();
     void environmentStore.refresh();
+    void refreshWslDistros();
   });
 
   const isConnected = $derived(engineStore.config !== null);
@@ -329,17 +386,32 @@
               <p class="font-medium">{i18n.t.settings.credsWarningTitle}</p>
               <p class="mt-0.5 text-[11px] opacity-80">{env.creds_store_warning}</p>
             </div>
-            <button
-              type="button"
-              onclick={() => void environmentStore.fixCredsStore()}
-              disabled={environmentStore.busyAction !== null}
-              class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white shadow-xs transition hover:bg-amber-500 disabled:opacity-50"
-            >
-              {#if environmentStore.busyAction === "creds"}
-                <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onclick={() => void environmentStore.fixCredsStore()}
+                disabled={environmentStore.busyAction !== null}
+                class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white shadow-xs transition hover:bg-amber-500 disabled:opacity-50"
+              >
+                {#if environmentStore.busyAction === "creds"}
+                  <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+                {/if}
+                {i18n.t.settings.credsWarningFix}
+              </button>
+              {#if env.wincred_available}
+                <button
+                  type="button"
+                  onclick={async () => {
+                    await systemApi.setWincredCredsStore();
+                    await environmentStore.refresh();
+                  }}
+                  disabled={environmentStore.busyAction !== null}
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 font-medium text-amber-800 transition hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-200"
+                >
+                  {i18n.t.extra.useWincred}
+                </button>
               {/if}
-              {i18n.t.settings.credsWarningFix}
-            </button>
+            </div>
           </div>
         {/if}
 
@@ -493,9 +565,50 @@
 
     <!-- WSL2 VM Resources & Networking -->
     <div class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
-      <div class="border-b border-slate-200 pb-4 dark:border-slate-800">
-        <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{i18n.t.settings.wslSection}</h3>
-        <p class="text-xs text-slate-400">{i18n.t.settings.wslSectionDesc}</p>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{i18n.t.settings.wslSection}</h3>
+          <p class="text-xs text-slate-400">{i18n.t.settings.wslSectionDesc}</p>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px] text-slate-400">{i18n.t.extra.profilesTitle}:</span>
+          <button
+            type="button"
+            disabled={!isConnected}
+            onclick={() => applyResourceProfile("eco")}
+            class={`rounded-md border px-2 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
+              activeProfile === "eco"
+                ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/20 dark:text-sky-300"
+                : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            {i18n.t.extra.profileEco}
+          </button>
+          <button
+            type="button"
+            disabled={!isConnected}
+            onclick={() => applyResourceProfile("balanced")}
+            class={`rounded-md border px-2 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
+              activeProfile === "balanced"
+                ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/20 dark:text-sky-300"
+                : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            {i18n.t.extra.profileBalanced}
+          </button>
+          <button
+            type="button"
+            disabled={!isConnected}
+            onclick={() => applyResourceProfile("perf")}
+            class={`rounded-md border px-2 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
+              activeProfile === "perf"
+                ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/20 dark:text-sky-300"
+                : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            {i18n.t.extra.profilePerf}
+          </button>
+        </div>
       </div>
 
       <div>
@@ -647,4 +760,48 @@
       </button>
     </div>
   </div>
+
+  <!-- WSL2 Distro Integration & Diagnostics -->
+  <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{i18n.t.extra.wslDistrosTitle}</h3>
+        <p class="text-xs text-slate-400">{i18n.t.extra.wslDistrosDesc}</p>
+      </div>
+      <button
+        type="button"
+        onclick={() => (diagnosticsOpen = true)}
+        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+      >
+        <Icon name="activity" class="h-3.5 w-3.5 text-sky-500" />
+        {i18n.t.extra.runDoctor}
+      </button>
+    </div>
+
+    {#if wslDistros.length === 0}
+      <p class="text-xs text-slate-400">{i18n.t.extra.wslDistrosEmpty}</p>
+    {:else}
+      <div class="divide-y divide-slate-200 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+        {#each wslDistros as distro}
+          <div class="flex items-center justify-between px-4 py-2.5">
+            <div>
+              <span class="text-sm font-medium text-slate-800 dark:text-slate-200">{distro.name}</span>
+              <span class="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                WSL{distro.version} · {distro.state}
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              checked={distro.integrated}
+              disabled={distro.version !== 2 || distroBusy === distro.name}
+              onchange={() => void toggleDistroIntegration(distro)}
+              class="h-4 w-4 accent-sky-600 disabled:opacity-40"
+            />
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
 </section>
+
+<DiagnosticsModal open={diagnosticsOpen} onClose={() => (diagnosticsOpen = false)} />

@@ -13,8 +13,10 @@
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { useConfirm } from "../../lib/utils/confirm.svelte";
   import { formatBytes, formatIsoDate } from "../../lib/utils/format";
+  import ContainerFilesTab from "./ContainerFilesTab.svelte";
+  import ContainerTerminalTab from "./ContainerTerminalTab.svelte";
 
-  export type DetailTab = "logs" | "stats" | "inspect" | "env" | "mounts";
+  export type DetailTab = "logs" | "stats" | "inspect" | "env" | "mounts" | "terminal" | "files";
 
   let {
     containerId,
@@ -402,6 +404,8 @@
       { id: "inspect", label: "Inspect", icon: "info" },
       { id: "env", label: `Environment (${info?.env.length ?? 0})`, icon: "settings" },
       { id: "mounts", label: `Mounts (${info?.mounts.length ?? 0})`, icon: "volumes" },
+      { id: "terminal", label: i18n.t.detail.tabTerminal, icon: "terminal" },
+      { id: "files", label: i18n.t.detail.tabFiles, icon: "folder" },
     ] as const as tab}
       <button
         type="button"
@@ -653,6 +657,11 @@
         </div>
       {/if}
     {/if}
+  {/if}
+  {#if activeTab === "terminal"}
+    <ContainerTerminalTab {containerId} {isRunning} />
+  {:else if activeTab === "files"}
+    <ContainerFilesTab {containerId} />
   {/if}
 </section>
 

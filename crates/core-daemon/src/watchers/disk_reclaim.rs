@@ -48,8 +48,15 @@ impl DiskReclaimHook {
                         info!(distro = %distro_name, "Running debounced fstrim -av");
                         match trim_distro(ctx.wsl.as_ref(), &distro_name).await {
                             Ok(output) => {
-                                info!(output = %output, "Disk trim completed");
-                                let _ = ctx.events.send(DaemonEvent::DiskTrimmed { reclaimed_bytes: None });
+                                let reclaimed = parse_fstrim_bytes(&output);
+                                if let Some(bytes) = reclaimed {
+                                    ctx.total_reclaimed_bytes
+                                        .fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+                                }
+                                info!(output = %output, reclaimed_bytes = ?reclaimed, "Disk trim completed");
+                                let _ = ctx.events.send(DaemonEvent::DiskTrimmed {
+                                    reclaimed_bytes: reclaimed,
+                                });
                             }
                             Err(err) => {
                                 warn!(error = %err, "Disk trim failed");
@@ -75,6 +82,24 @@ impl DockerEventHook for DiskReclaimHook {
             self.trigger.notify_one();
         }
     }
+}
+
+/// Parses total trimmed bytes from `fstrim -av` output (e.g. `/: 128 MiB (134217728 bytes) trimmed`).
+pub fn parse_fstrim_bytes(output: &str) -> Option<u64> {
+    let mut total = 0u64;
+    let mut found = false;
+    for line in output.lines() {
+        if let Some(idx) = line.find(" bytes)") {
+            let prefix = &line[..idx];
+            if let Some(open) = prefix.rfind('(') {
+                if let Ok(n) = prefix[open + 1..].trim().parse::<u64>() {
+                    total = total.saturating_add(n);
+                    found = true;
+                }
+            }
+        }
+    }
+    found.then_some(total)
 }
 
 /// Returns `true` for Docker events that free disk blocks inside the WSL2 ext4 filesystem.

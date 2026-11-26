@@ -2,6 +2,7 @@ mod app_context;
 mod config_store;
 mod control_rpc;
 mod lifecycle;
+mod log_store;
 mod pipe_server;
 mod proxy;
 mod startup;
@@ -20,7 +21,10 @@ use crate::watchers::{DiskReclaimHook, DockerEventHook};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let log_writer = log_store::TeeLogWriter::open(&log_store::default_log_path());
     tracing_subscriber::fmt()
+        .with_writer(log_writer)
+        .with_ansi(false)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "core_daemon=info,wsl_bridge=info".into()),

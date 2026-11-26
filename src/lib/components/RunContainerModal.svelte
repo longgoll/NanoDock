@@ -27,6 +27,21 @@
     ),
   );
 
+  const quickTemplates = [
+    { label: "Postgres 16", image: "postgres:16-alpine", name: "pg-dev", ports: "5432:5432", env: "POSTGRES_PASSWORD=postgres" },
+    { label: "Redis 7", image: "redis:7-alpine", name: "redis-dev", ports: "6379:6379", env: "" },
+    { label: "MySQL 8", image: "mysql:8.4", name: "mysql-dev", ports: "3306:3306", env: "MYSQL_ROOT_PASSWORD=root" },
+    { label: "Nginx", image: "nginx:alpine", name: "nginx-dev", ports: "8080:80", env: "" },
+    { label: "Mailpit", image: "axllent/mailpit:latest", name: "mailpit", ports: "8025:8025, 1025:1025", env: "" },
+  ];
+
+  function applyTemplate(tpl: (typeof quickTemplates)[number]) {
+    imageRef = tpl.image;
+    name = tpl.name;
+    ports = tpl.ports;
+    env = tpl.env;
+  }
+
   $effect(() => {
     if (open) {
       imageRef = initialImage;
@@ -99,6 +114,20 @@
 
       {#if allowImageEdit}
         <div>
+          <p class="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+            {i18n.t.extra.templatesTitle}
+          </p>
+          <div class="mb-3 flex flex-wrap gap-1.5">
+            {#each quickTemplates as tpl}
+              <button
+                type="button"
+                onclick={() => applyTemplate(tpl)}
+                class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-sky-400 hover:text-sky-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+              >
+                {tpl.label}
+              </button>
+            {/each}
+          </div>
           <label for="run-image" class="block text-xs font-medium text-slate-700 dark:text-slate-300">
             Image
           </label>

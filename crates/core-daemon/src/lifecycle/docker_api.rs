@@ -698,7 +698,7 @@ pub(super) fn sanitize_path_segment(input: &str) -> anyhow::Result<&str> {
     Ok(trimmed)
 }
 
-fn percent_encode_query(input: &str) -> String {
+pub(super) fn percent_encode_query(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for b in input.bytes() {
         match b {
@@ -734,7 +734,7 @@ fn format_ports(ports: Option<&Vec<Value>>) -> Vec<String> {
 }
 
 /// Decodes Docker's 8-byte multiplexed log frames, falling back to plain UTF-8 if unframed.
-fn decode_docker_logs(raw: &[u8]) -> String {
+pub(super) fn decode_docker_logs(raw: &[u8]) -> String {
     let mut pos = 0;
     let mut out = String::new();
     while pos + 8 <= raw.len() {
