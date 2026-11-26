@@ -1,6 +1,6 @@
 [package]
 name = "nanodock-ui"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 
 [workspace]
@@ -17,6 +17,7 @@ anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 shared-types = { path = "../crates/shared-types" }
+wsl-bridge = { path = "../crates/wsl-bridge" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"

@@ -7,6 +7,7 @@
   import RefreshButton from "../../lib/components/RefreshButton.svelte";
   import { i18n, type LocalePreference } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
+  import { environmentStore } from "../../lib/stores/environment.svelte";
   import { updaterStore } from "../../lib/stores/updater.svelte";
 
   const DEFAULT_CONFIG: EngineConfig = {
@@ -70,6 +71,7 @@
       draft = cloneConfig(engineStore.config);
     }
     void load();
+    void environmentStore.refresh();
   });
 
   const isConnected = $derived(engineStore.config !== null);
@@ -272,6 +274,128 @@
     {#if updaterStore.error}
       <p class="text-xs text-rose-600 dark:text-rose-400">
         {updaterStore.error}
+      </p>
+    {/if}
+  </div>
+
+  <!-- System & CLI Integration -->
+  <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900 dark:text-white">{i18n.t.settings.systemTitle}</h3>
+        <p class="text-xs text-slate-400">{i18n.t.settings.systemDesc}</p>
+      </div>
+      {#if environmentStore.status}
+        <span
+          class={`rounded-full px-2.5 py-1 text-xs font-medium ${
+            environmentStore.status.wsl_installed
+              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+              : "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+          }`}
+        >
+          WSL2: {environmentStore.status.wsl_installed ? i18n.t.settings.wslInstalled : i18n.t.settings.wslMissing}
+        </span>
+      {/if}
+    </div>
+
+    {#if environmentStore.status}
+      {@const env = environmentStore.status}
+      <div class="space-y-4">
+        {#if !env.wsl_installed}
+          <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            <div>
+              <p class="font-medium">{i18n.t.settings.wslStatusLabel}: {i18n.t.settings.wslMissing}</p>
+              {#if env.wsl_status_detail}
+                <p class="mt-0.5 text-[11px] opacity-80">{env.wsl_status_detail}</p>
+              {/if}
+            </div>
+            <button
+              type="button"
+              onclick={() => void environmentStore.installWsl2()}
+              disabled={environmentStore.busyAction !== null}
+              class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white shadow-xs transition hover:bg-amber-500 disabled:opacity-50"
+            >
+              {#if environmentStore.busyAction === "wsl2"}
+                <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+              {/if}
+              {environmentStore.busyAction === "wsl2" ? i18n.t.settings.installingWsl2 : i18n.t.settings.installWsl2}
+            </button>
+          </div>
+        {/if}
+
+        {#if env.creds_store_warning}
+          <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            <div>
+              <p class="font-medium">{i18n.t.settings.credsWarningTitle}</p>
+              <p class="mt-0.5 text-[11px] opacity-80">{env.creds_store_warning}</p>
+            </div>
+            <button
+              type="button"
+              onclick={() => void environmentStore.fixCredsStore()}
+              disabled={environmentStore.busyAction !== null}
+              class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white shadow-xs transition hover:bg-amber-500 disabled:opacity-50"
+            >
+              {#if environmentStore.busyAction === "creds"}
+                <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+              {/if}
+              {i18n.t.settings.credsWarningFix}
+            </button>
+          </div>
+        {/if}
+
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {i18n.t.settings.userPathLabel}
+            </p>
+            <p class="mt-0.5 text-xs text-slate-400">
+              {i18n.t.settings.userPathDesc}
+            </p>
+            <p class="mt-1 font-mono text-[11px] text-slate-400">{env.install_dir}</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={env.nanodock_in_path}
+            disabled={environmentStore.busyAction !== null}
+            onchange={(e) => void environmentStore.setUserPath(e.currentTarget.checked)}
+            class="mt-1 h-4 w-4 shrink-0 accent-sky-600 disabled:opacity-50"
+          />
+        </div>
+
+        <div class="flex items-start justify-between gap-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <div>
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {i18n.t.settings.dockerShimLabel}
+            </p>
+            <p class="mt-0.5 text-xs text-slate-400">
+              {i18n.t.settings.dockerShimDesc}
+            </p>
+            {#if !env.nanodock_cli_available}
+              <p class="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                {i18n.t.settings.cliUnavailable}
+              </p>
+            {:else if env.external_docker_path}
+              <p class="mt-1 font-mono text-[11px] text-slate-400">
+                {i18n.t.settings.dockerShimExternalFound(env.external_docker_path)}
+              </p>
+            {/if}
+          </div>
+          <input
+            type="checkbox"
+            checked={env.docker_shim_active}
+            disabled={!env.nanodock_cli_available || environmentStore.busyAction !== null}
+            onchange={(e) => void environmentStore.setDockerShim(e.currentTarget.checked)}
+            class="mt-1 h-4 w-4 shrink-0 accent-sky-600 disabled:opacity-50"
+          />
+        </div>
+      </div>
+    {:else if environmentStore.loading}
+      <p class="text-xs text-slate-400">{i18n.t.settings.checkingUpdates}</p>
+    {/if}
+
+    {#if environmentStore.error}
+      <p class="text-xs text-rose-600 dark:text-rose-400">
+        {environmentStore.error}
       </p>
     {/if}
   </div>

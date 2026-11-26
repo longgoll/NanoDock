@@ -5,6 +5,12 @@ All notable changes to NanoDock will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-26
+
+### Added
+- **Smart First-Run CLI Setup:** Automatically adds NanoDock to Windows User `PATH` and creates a `docker.exe` shim (via `nanodock-cli`) on first launch when no external `docker.exe` is installed.
+- **System & CLI Integration Settings:** Added a new Settings card and startup alert banner with 1-click **Enable WSL2** (`wsl --install --no-distribution` via UAC), **User `PATH`** toggle, **`docker.exe` shim** toggle, and 1-click **`credsStore: "desktop"`** auto-fix (with `config.json.bak` backup).
+
 ## [0.5.0] - 2026-11-26
 
 ### Added

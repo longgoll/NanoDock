@@ -87,6 +87,7 @@ pub fn run() {
         .manage(AllowExit(Arc::clone(&allow_exit)))
         .manage(daemon_child)
         .setup(move |app| {
+            commands::system::auto_configure_cli_on_first_run();
             if let Some(child) = spawn_daemon_if_needed() {
                 if let Ok(mut guard) = daemon_for_setup.0.lock() {
                     *guard = Some(child);
@@ -123,6 +124,11 @@ pub fn run() {
             commands::engine::run_container,
             commands::engine::open_container_shell,
             commands::engine::open_localhost_port,
+            commands::system::get_environment_status,
+            commands::system::install_wsl2,
+            commands::system::set_user_path_integration,
+            commands::system::set_docker_cli_shim,
+            commands::system::fix_docker_creds_store,
             prepare_for_update,
         ])
         .build(tauri::generate_context!())

@@ -24,6 +24,10 @@ async fn main() -> ExitCode {
 }
 
 async fn run(args: Vec<OsString>) -> anyhow::Result<u8> {
+    if invoked_as_docker() {
+        return cmd_passthrough(&args).await;
+    }
+
     let Some(first) = args.first() else {
         print_help();
         return Ok(0);
@@ -258,26 +262,48 @@ async fn open_control_pipe_with_retry(
     anyhow::bail!("core-daemon control pipe remained busy")
 }
 
+fn invoked_as_docker() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().eq_ignore_ascii_case("docker")))
+        .unwrap_or(false)
+}
+
 fn find_sibling_exe(name: &str) -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let candidate = exe.parent()?.join(name);
     candidate.exists().then_some(candidate)
 }
 
-/// Finds a native `docker.exe` binary (skipping `.cmd`/`.bat` shims such as Podman's `docker.cmd`).
+/// Finds an external `docker.exe` binary on `PATH`, skipping NanoDock's own directory
+/// so a `docker.exe` shim (hardlink/copy of `nanodock.exe`) never recurses into itself.
 fn find_real_docker_exe() -> Option<PathBuf> {
-    if let Some(sibling) = find_sibling_exe("docker.exe") {
-        return Some(sibling);
-    }
+    let self_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf));
 
     let path_var = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path_var) {
+        if let Some(ref own_dir) = self_dir {
+            if paths_equal_ci(&dir, own_dir) {
+                continue;
+            }
+        }
         let candidate = dir.join("docker.exe");
         if candidate.is_file() {
             return Some(candidate);
         }
     }
     None
+}
+
+fn paths_equal_ci(a: &Path, b: &Path) -> bool {
+    let norm = |p: &Path| {
+        p.to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .to_ascii_lowercase()
+    };
+    norm(a) == norm(b)
 }
 
 fn exit_code_to_u8(code: Option<i32>) -> u8 {

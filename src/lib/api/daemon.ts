@@ -96,6 +96,17 @@ export interface RunContainerSpec {
   env: string[];
 }
 
+export interface EnvironmentStatus {
+  wsl_installed: boolean;
+  wsl_status_detail: string;
+  install_dir: string;
+  nanodock_cli_available: boolean;
+  nanodock_in_path: boolean;
+  docker_shim_active: boolean;
+  external_docker_path: string | null;
+  creds_store_warning: string | null;
+}
+
 export type ControlResponse =
   | {
       status: "status";
@@ -149,4 +160,14 @@ export const daemonApi = {
   runContainer: (spec: RunContainerSpec) => invoke<ControlResponse>("run_container", { spec }),
   openContainerShell: (id: string) => invoke<void>("open_container_shell", { id }),
   openLocalhostPort: (port: number) => invoke<void>("open_localhost_port", { port }),
+};
+
+export const systemApi = {
+  getEnvironmentStatus: () => invoke<EnvironmentStatus>("get_environment_status"),
+  installWsl2: () => invoke<string>("install_wsl2"),
+  setUserPathIntegration: (enabled: boolean) =>
+    invoke<EnvironmentStatus>("set_user_path_integration", { enabled }),
+  setDockerCliShim: (enabled: boolean) =>
+    invoke<EnvironmentStatus>("set_docker_cli_shim", { enabled }),
+  fixDockerCredsStore: () => invoke<EnvironmentStatus>("fix_docker_creds_store"),
 };

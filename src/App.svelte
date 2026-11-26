@@ -12,6 +12,7 @@
   import QuickGuideModal from "./lib/components/QuickGuideModal.svelte";
   import { i18n } from "./lib/i18n/index.svelte";
   import { engineStore } from "./lib/stores/engine.svelte";
+  import { environmentStore } from "./lib/stores/environment.svelte";
   import { updaterStore } from "./lib/stores/updater.svelte";
 
   type Tab = "dashboard" | "containers" | "images" | "volumes" | "networks" | "storage" | "settings";
@@ -44,11 +45,13 @@
 
     void engineStore.refreshAll(true);
     void updaterStore.checkForUpdates(true);
+    void environmentStore.refresh();
 
     const syncAll = () => {
       if (document.hidden || !engineStore.autoRefresh || engineStore.busy) return;
       void engineStore.refreshAll(true);
     void updaterStore.checkForUpdates(true);
+    void environmentStore.refresh();
     };
 
     const timer = setInterval(syncAll, 5000);
@@ -268,6 +271,46 @@
         class="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-sky-500/15"
       >
         <div class="h-full w-1/3 animate-pulse bg-sky-500"></div>
+      </div>
+    {/if}
+    {#if environmentStore.status && !environmentStore.bannerDismissed && (!environmentStore.status.wsl_installed || environmentStore.status.creds_store_warning)}
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        <div class="flex items-center gap-2.5">
+          <Icon name="alert" class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span class="font-medium">
+            {!environmentStore.status.wsl_installed
+              ? i18n.t.settings.envBannerWslMissing
+              : i18n.t.settings.envBannerCredsStore}
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          {#if !environmentStore.status.wsl_installed}
+            <button
+              type="button"
+              onclick={() => void environmentStore.installWsl2()}
+              disabled={environmentStore.busyAction !== null}
+              class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white shadow-xs transition hover:bg-amber-500 disabled:opacity-60"
+            >
+              {environmentStore.busyAction === "wsl2" ? i18n.t.settings.installingWsl2 : i18n.t.settings.installWsl2}
+            </button>
+          {:else if environmentStore.status.creds_store_warning}
+            <button
+              type="button"
+              onclick={() => void environmentStore.fixCredsStore()}
+              disabled={environmentStore.busyAction !== null}
+              class="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white shadow-xs transition hover:bg-amber-500 disabled:opacity-60"
+            >
+              {i18n.t.settings.credsWarningFix}
+            </button>
+          {/if}
+          <button
+            type="button"
+            onclick={() => environmentStore.dismissBanner()}
+            class="rounded-lg px-2.5 py-1.5 font-medium text-amber-800 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-500/20"
+          >
+            {i18n.t.settings.later}
+          </button>
+        </div>
       </div>
     {/if}
     {#if updaterStore.availableVersion && !updaterStore.dismissed}
