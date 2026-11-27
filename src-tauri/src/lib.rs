@@ -141,6 +141,7 @@ pub fn run() {
             commands::engine_extra::set_wsl_distro_integration,
             commands::engine_extra::get_build_cache,
             commands::engine_extra::prune_build_cache,
+            commands::engine_extra::set_keep_awake,
             commands::system::get_environment_status,
             commands::system::install_wsl2,
             commands::system::set_user_path_integration,
@@ -155,6 +156,7 @@ pub fn run() {
             commands::terminal::close_exec_session,
             commands::terminal::start_container_logs_stream,
             commands::terminal::start_container_stats_stream,
+            commands::terminal::start_pull_image_stream,
             commands::terminal::stop_container_stream,
             prepare_for_update,
         ])

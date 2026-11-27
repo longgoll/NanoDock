@@ -49,6 +49,7 @@ async fn forward_stream(stream: yamux::Stream, socket_path: &str) -> anyhow::Res
 fn build_yamux_config() -> Config {
     let mut cfg = Config::default();
     cfg.set_max_num_streams(1024);
-    cfg.set_max_connection_receive_window(Some(16 * 1024 * 1024));
+    // Must be >= 256 KiB * max_num_streams (256 MiB for 1024 streams) per yamux 0.13 invariant.
+    cfg.set_max_connection_receive_window(Some(256 * 1024 * 1024));
     cfg
 }

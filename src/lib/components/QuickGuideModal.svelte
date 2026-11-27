@@ -1,5 +1,6 @@
 <script lang="ts">
   import { i18n } from "../i18n/index.svelte";
+  import { trapModalTab } from "../utils/focusTrap";
   import Icon from "./Icon.svelte";
 
   let {
@@ -10,10 +11,22 @@
     onClose: () => void;
   } = $props();
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape") {
-      onClose();
+  let dialogEl = $state<HTMLDivElement | null>(null);
+  let closeBtnEl = $state<HTMLButtonElement | null>(null);
+
+  $effect(() => {
+    if (open) {
+      queueMicrotask(() => closeBtnEl?.focus());
     }
+  });
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (!open) return;
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+    trapModalTab(e, dialogEl);
   }
 </script>
 
@@ -29,6 +42,7 @@
     }}
   >
     <div
+      bind:this={dialogEl}
       role="dialog"
       aria-modal="true"
       aria-labelledby="quick-guide-title"
@@ -49,6 +63,7 @@
           </div>
         </div>
         <button
+          bind:this={closeBtnEl}
           type="button"
           onclick={onClose}
           aria-label={i18n.t.quickGuide.closeLabel}
@@ -101,6 +116,7 @@
           {i18n.t.quickGuide.tip}
         </p>
         <button
+          bind:this={closeBtnEl}
           type="button"
           onclick={onClose}
           class="rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"

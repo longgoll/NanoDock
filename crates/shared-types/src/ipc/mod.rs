@@ -6,4 +6,7 @@ pub use models::{
     ContainerStats, ContainerSummary, EngineMetrics, ImageLayer, ImageSummary, NetworkSummary,
     RunContainerSpec, VolumeSummary, WslDistroInfo,
 };
-pub use protocol::{ControlRequest, ControlResponse, ExecClientFrame, ExecServerFrame, LogStreamFrame};
+pub use protocol::{
+    ControlRequest, ControlResponse, ExecClientFrame, ExecServerFrame, LogStreamFrame,
+    PullProgressFrame,
+};

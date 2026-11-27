@@ -29,22 +29,20 @@
   let newVolumeDriver = $state("local");
   let volumeNameInput = $state<HTMLInputElement | null>(null);
   let archiveBusy = $state<string | null>(null);
-  let archiveMessage = $state<{ ok: boolean; text: string } | null>(null);
 
   async function handleExportVolume(name: string) {
     const dest = await systemApi.pickArchiveFile("save", `${name}.tar.gz`);
     if (!dest) return;
     archiveBusy = `export:${name}`;
-    archiveMessage = null;
     try {
       const resp = await daemonApi.exportVolume(name, dest);
       if (resp.status === "ack") {
-        archiveMessage = { ok: true, text: `${i18n.t.extra.volumeExported} ${dest}` };
+        engineStore.setNotice(`${i18n.t.extra.volumeExported} ${dest}`);
       } else if (resp.status === "error") {
-        archiveMessage = { ok: false, text: resp.data.message };
+        engineStore.error = resp.data.message;
       }
     } catch (e) {
-      archiveMessage = { ok: false, text: e instanceof Error ? e.message : String(e) };
+      engineStore.error = e instanceof Error ? e.message : String(e);
     } finally {
       archiveBusy = null;
     }
@@ -54,16 +52,15 @@
     const src = await systemApi.pickArchiveFile("open", `${name}.tar.gz`);
     if (!src) return;
     archiveBusy = `import:${name}`;
-    archiveMessage = null;
     try {
       const resp = await daemonApi.importVolume(name, src);
       if (resp.status === "ack") {
-        archiveMessage = { ok: true, text: `${i18n.t.extra.volumeImported} ${src}` };
+        engineStore.setNotice(`${i18n.t.extra.volumeImported} ${src}`);
       } else if (resp.status === "error") {
-        archiveMessage = { ok: false, text: resp.data.message };
+        engineStore.error = resp.data.message;
       }
     } catch (e) {
-      archiveMessage = { ok: false, text: e instanceof Error ? e.message : String(e) };
+      engineStore.error = e instanceof Error ? e.message : String(e);
     } finally {
       archiveBusy = null;
     }
@@ -124,9 +121,9 @@
 
   function confirmDeleteSingle(vol: VolumeSummary) {
     confirmState.request({
-      title: `Delete volume "${vol.name}"?`,
-      message: `All persistent data stored in "${vol.name}" will be permanently deleted.`,
-      label: "Delete Volume",
+      title: i18n.t.confirm.deleteVolumeTitle(vol.name),
+      message: i18n.t.confirm.deleteVolumeMsg(vol.name),
+      label: i18n.t.confirm.deleteVolumeBtn,
       danger: true,
       action: async () => {
         await engineStore.removeVolume(vol.name);
@@ -141,9 +138,9 @@
     const names = Array.from(selectedNames);
     if (names.length === 0) return;
     confirmState.request({
-      title: `Delete ${names.length} unused volume(s)?`,
-      message: `All data in the ${names.length} selected unused volume(s) will be permanently lost.`,
-      label: "Delete Selected",
+      title: i18n.t.confirm.deleteSelectedVolumesTitle(names.length),
+      message: i18n.t.confirm.deleteSelectedVolumesMsg(names.length),
+      label: i18n.t.confirm.deleteSelectedBtn,
       danger: true,
       action: async () => {
         await engineStore.removeVolumesBatch(names);
@@ -154,9 +151,9 @@
 
   function confirmPruneUnused() {
     confirmState.request({
-      title: `Prune ${unusedCount} unused volume(s)?`,
-      message: "All volumes not currently mounted by any container will be permanently removed.",
-      label: "Prune Unused",
+      title: i18n.t.confirm.pruneVolumesTitle(unusedCount),
+      message: i18n.t.confirm.pruneVolumesMsg,
+      label: i18n.t.confirm.pruneBtn,
       danger: false,
       action: async () => {
         await engineStore.pruneVolumes();
@@ -233,7 +230,7 @@
         <button
           type="button"
           onclick={openCreateModal}
-          disabled={engineStore.busy}
+          disabled={engineStore.engineBusy || engineStore.isPending("volumes:create")}
           class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
         >
           <Icon name="plus" class="h-3.5 w-3.5" />
@@ -243,7 +240,7 @@
           <button
             type="button"
             onclick={confirmPruneUnused}
-            disabled={engineStore.busy}
+            disabled={engineStore.engineBusy || engineStore.isPending("volumes:prune")}
             class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300"
           >
             <Icon
@@ -260,26 +257,6 @@
       </div>
     {/if}
   </div>
-
-  {#if archiveMessage}
-    <div
-      class={`flex items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-xs ${
-        archiveMessage.ok
-          ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
-          : "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
-      }`}
-    >
-      <span class="break-all">{archiveMessage.text}</span>
-      <button
-        type="button"
-        onclick={() => (archiveMessage = null)}
-        aria-label={i18n.t.common.cancel}
-        class="shrink-0 rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
-      >
-        <Icon name="close" class="h-3.5 w-3.5" />
-      </button>
-    </div>
-  {/if}
 
   {#if engineStore.state === "stopped"}
     <EngineSleepingCard resourceLabel={i18n.t.volumes.resourceLabel} />
@@ -335,7 +312,7 @@
           <button
             type="button"
             onclick={confirmDeleteSelected}
-            disabled={engineStore.busy}
+            disabled={engineStore.engineBusy || engineStore.isPending("volumes:batch:remove")}
             class="inline-flex items-center gap-1.5 rounded-md bg-rose-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-rose-500 disabled:opacity-50"
           >
             {#if engineStore.isPending("volumes:batch:remove")}
@@ -357,14 +334,28 @@
     <!-- Volumes Table -->
     {#if filtered.length === 0}
       <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
-        {i18n.t.volumes.emptyPrefix}
-        <code class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sky-700 dark:bg-slate-800 dark:text-sky-400">
-          nanodock volume create mydata
-        </code>.
+        {#if totalCount === 0}
+          {i18n.t.volumes.emptyPrefix}
+          <code class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sky-700 dark:bg-slate-800 dark:text-sky-400">
+            nanodock volume create mydata
+          </code>.
+        {:else}
+          <p>{i18n.t.volumes.emptyFiltered}</p>
+          <button
+            type="button"
+            onclick={() => {
+              query = "";
+              usageFilter = "all";
+            }}
+            class="mt-3 rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {i18n.t.nav.clearFilter}
+          </button>
+        {/if}
       </div>
     {:else}
       <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
-        <table class="w-full text-left text-sm">
+        <table class="w-full min-w-[720px] text-left text-sm">
           <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
             <tr>
               <th class="w-10 px-4 py-3">
@@ -462,7 +453,7 @@
                       <button
                         type="button"
                         onclick={() => confirmDeleteSingle(vol)}
-                        disabled={engineStore.busy}
+                        disabled={engineStore.engineBusy || engineStore.isPending(`volume:${vol.name}:remove`)}
                         aria-label={`Delete volume ${vol.name}`}
                         class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
                       >

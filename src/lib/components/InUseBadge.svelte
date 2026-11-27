@@ -1,5 +1,6 @@
 <script lang="ts">
   import { i18n } from "../i18n/index.svelte";
+  import { engineStore } from "../stores/engine.svelte";
   import Icon from "./Icon.svelte";
 
   let {
@@ -30,11 +31,27 @@
     {i18n.t.inUseBadge.inUse}
   </span>
   {#if usedBy.length > 0}
-    <div
-      class="mt-0.5 max-w-[180px] truncate text-[11px] text-slate-400"
-      title={usedBy.join(", ")}
-    >
-      {usedBy.join(", ")}
+    <div class="mt-1 flex max-w-[200px] flex-wrap gap-1">
+      {#each usedBy as name}
+        {@const targetId = engineStore.findContainerIdByName(name)}
+        {#if targetId}
+          <button
+            type="button"
+            onclick={() => engineStore.openContainerDetail(targetId)}
+            title={name}
+            class="max-w-[180px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-sky-700 transition hover:bg-sky-50 hover:underline dark:bg-slate-800 dark:text-sky-400 dark:hover:bg-sky-500/15"
+          >
+            {name}
+          </button>
+        {:else}
+          <span
+            class="max-w-[180px] truncate text-[11px] text-slate-400"
+            title={name}
+          >
+            {name}
+          </span>
+        {/if}
+      {/each}
     </div>
   {/if}
 {:else}

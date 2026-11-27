@@ -136,7 +136,21 @@ export interface EngineMetrics {
   hibernate_count: number;
   total_reclaimed_bytes: number;
   uptime_secs: number;
+  keep_awake?: boolean;
+  idle_remaining_secs?: number | null;
 }
+
+export type PullProgressFrame =
+  | {
+      type: "progress";
+      id: string | null;
+      status: string;
+      progress: string | null;
+      current: number | null;
+      total: number | null;
+    }
+  | { type: "done" }
+  | { type: "error"; message: string };
 
 export interface BuildCacheSummary {
   total_bytes: number;
@@ -239,6 +253,7 @@ export const daemonApi = {
     invoke<ControlResponse>("import_volume", { name, srcPath }),
   getEngineLogs: (lines = 150) => invoke<ControlResponse>("get_engine_logs", { lines }),
   getEngineMetrics: () => invoke<ControlResponse>("get_engine_metrics"),
+  setKeepAwake: (enabled: boolean) => invoke<ControlResponse>("set_keep_awake", { enabled }),
   getBuildCache: () => invoke<ControlResponse>("get_build_cache"),
   pruneBuildCache: () => invoke<ControlResponse>("prune_build_cache"),
   listWslDistros: () => invoke<ControlResponse>("list_wsl_distros"),
@@ -286,6 +301,8 @@ export const daemonApi = {
       containerId,
       onStats,
     }),
+  startPullImageStream: (reference: string, onFrame: Channel<PullProgressFrame>) =>
+    invoke<void>("start_pull_image_stream", { reference, onFrame }),
   stopContainerStream: (streamKey: string) =>
     invoke<void>("stop_container_stream", { streamKey }),
 };

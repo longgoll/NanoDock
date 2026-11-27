@@ -16,8 +16,12 @@
     cursor: not-allowed;
   }
 
-  button:not(:disabled):active {
+  button:not(:disabled):not([data-card]):active {
     transform: scale(0.97);
+  }
+
+  button[data-card]:not(:disabled):active {
+    transform: scale(0.99);
   }
 
   button:focus-visible {

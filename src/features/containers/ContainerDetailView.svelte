@@ -47,8 +47,21 @@
   let logsQuery = $state("");
   let loadingLogs = $state(false);
   let liveLogs = $state(true);
+  let logsPinnedBottom = $state(true);
   let copiedLogs = $state(false);
   let logsPre = $state<HTMLPreElement | null>(null);
+
+  function handleLogsScroll() {
+    if (!logsPre) return;
+    const distance = logsPre.scrollHeight - logsPre.scrollTop - logsPre.clientHeight;
+    logsPinnedBottom = distance < 48;
+  }
+
+  function jumpLogsToBottom() {
+    if (!logsPre) return;
+    logsPinnedBottom = true;
+    logsPre.scrollTop = logsPre.scrollHeight;
+  }
 
   // Stats state (with lightweight rolling history for sparkline)
   let stats = $state<ContainerStats | null>(null);
@@ -114,9 +127,9 @@
         } else {
           logsContent = (logsContent + frame.text).slice(-200_000);
         }
-        if (logsPre) {
+        if (logsPre && logsPinnedBottom) {
           queueMicrotask(() => {
-            if (logsPre) logsPre.scrollTop = logsPre.scrollHeight;
+            if (logsPre && logsPinnedBottom) logsPre.scrollTop = logsPre.scrollHeight;
           });
         }
       } else if (frame.type === "error") {
@@ -183,9 +196,9 @@
       const resp = await daemonApi.getContainerLogs(containerId, logsTail);
       if (resp.status === "container_logs") {
         logsContent = resp.data.logs || "(No logs output)";
-        if (liveLogs && logsPre) {
+        if (liveLogs && logsPre && logsPinnedBottom) {
           queueMicrotask(() => {
-            if (logsPre) logsPre.scrollTop = logsPre.scrollHeight;
+            if (logsPre && logsPinnedBottom) logsPre.scrollTop = logsPre.scrollHeight;
           });
         }
       } else if (resp.status === "error") {
@@ -228,15 +241,25 @@
 
   function confirmDelete() {
     confirmState.request({
-      title: `Delete container "${displayName}"?`,
-      message: `This will force-remove "${displayName}" (${containerId}).`,
-      label: "Delete",
+      title: i18n.t.confirm.deleteContainerTitle(displayName),
+      message: i18n.t.confirm.deleteContainerMsg(displayName, containerId),
+      label: i18n.t.common.delete,
       danger: true,
       action: async () => {
         await engineStore.runContainerAction(containerId, "remove");
         onDeleted();
       },
     });
+  }
+
+  function handleWindowKeydown(e: KeyboardEvent) {
+    if (e.key !== "Escape" || confirmState.open || activeTab === "terminal") return;
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) {
+      return;
+    }
+    onBack();
   }
 
   async function openShell() {
@@ -306,6 +329,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleWindowKeydown} />
+
 <section class="flex h-full flex-col gap-4">
   <!-- Top Bar & Breadcrumb -->
   <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
@@ -317,7 +342,7 @@
           class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
         >
           <Icon name="arrow-left" class="h-3.5 w-3.5" />
-          Containers
+          {i18n.t.containers.title}
         </button>
         <span>/</span>
         <span class="truncate font-mono text-slate-700 dark:text-slate-200">{displayName}</span>
@@ -385,7 +410,7 @@
             name={openingShell ? "spinner" : "terminal"}
             class={`h-3.5 w-3.5 ${openingShell ? "animate-spin" : ""}`}
           />
-          Open Terminal
+          {i18n.t.detail.openTerminal}
         </button>
         <button
           type="button"
@@ -443,11 +468,11 @@
   <!-- Sub-navigation Tabs -->
   <div class="flex flex-wrap items-center gap-1 border-b border-slate-200 pb-2 dark:border-slate-800">
     {#each [
-      { id: "logs", label: "Logs", icon: "logs" },
-      { id: "stats", label: "Stats", icon: "activity" },
-      { id: "inspect", label: "Inspect", icon: "info" },
-      { id: "env", label: `Environment (${info?.env.length ?? 0})`, icon: "settings" },
-      { id: "mounts", label: `Mounts (${info?.mounts.length ?? 0})`, icon: "volumes" },
+      { id: "logs", label: i18n.t.detail.tabLogs, icon: "logs" },
+      { id: "stats", label: i18n.t.detail.tabStats, icon: "activity" },
+      { id: "inspect", label: i18n.t.detail.tabInspect, icon: "info" },
+      { id: "env", label: i18n.t.detail.tabEnv(info?.env.length ?? 0), icon: "settings" },
+      { id: "mounts", label: i18n.t.detail.tabMounts(info?.mounts.length ?? 0), icon: "volumes" },
       { id: "terminal", label: i18n.t.detail.tabTerminal, icon: "terminal" },
       { id: "files", label: i18n.t.detail.tabFiles, icon: "folder" },
     ] as const as tab}
@@ -471,21 +496,30 @@
     <div class="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
       <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
         <div class="flex flex-wrap items-center gap-2">
-          <SearchInput bind:value={logsQuery} placeholder="Filter log lines..." class="w-52" />
+          <SearchInput bind:value={logsQuery} placeholder={i18n.t.detail.filterLogsPlaceholder} class="w-52" />
           <select
             bind:value={logsTail}
             onchange={() => fetchLogs()}
             aria-label="Number of log lines"
             class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           >
-            <option value={100}>Last 100</option>
-            <option value={200}>Last 200</option>
-            <option value={500}>Last 500</option>
-            <option value={1000}>Last 1000</option>
+            <option value={100}>{i18n.t.detail.lastNLines(100)}</option>
+            <option value={200}>{i18n.t.detail.lastNLines(200)}</option>
+            <option value={500}>{i18n.t.detail.lastNLines(500)}</option>
+            <option value={1000}>{i18n.t.detail.lastNLines(1000)}</option>
           </select>
         </div>
 
         <div class="flex items-center gap-2">
+          {#if liveLogs && isRunning && !logsPinnedBottom}
+            <button
+              type="button"
+              onclick={jumpLogsToBottom}
+              class="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 transition hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-300"
+            >
+              ↓ {i18n.t.detail.jumpToLatest}
+            </button>
+          {/if}
           <button
             type="button"
             onclick={() => (liveLogs = !liveLogs)}
@@ -497,7 +531,7 @@
             }`}
           >
             <span class={`h-1.5 w-1.5 rounded-full ${liveLogs && isRunning ? "animate-pulse bg-emerald-500" : "bg-slate-400"}`}></span>
-            Live
+            {i18n.t.detail.live}
           </button>
           <RefreshButton
             size="xs"
@@ -511,27 +545,28 @@
             class="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <Icon name={copiedLogs ? "check" : "copy"} class="h-3.5 w-3.5" />
-            {copiedLogs ? "Copied!" : "Copy"}
+            {copiedLogs ? i18n.t.common.copied : i18n.t.common.copy}
           </button>
         </div>
       </div>
 
       <pre
         bind:this={logsPre}
+        onscroll={handleLogsScroll}
         class="flex-1 overflow-auto bg-slate-950 p-4 font-mono text-xs leading-relaxed text-slate-200"
-      >{loadingLogs ? "Loading logs..." : filteredLogsText || "(No matching log lines)"}</pre>
+      >{loadingLogs ? i18n.t.detail.loadingLogs : filteredLogsText || i18n.t.detail.noMatchingLogs}</pre>
     </div>
   {:else if activeTab === "stats"}
     {#if !isRunning}
       <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-        Container is not running. Start the container to monitor live CPU and memory usage.
+        {i18n.t.detail.statsNotRunning}
       </div>
     {:else}
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-medium uppercase tracking-wider text-slate-400">CPU Usage</span>
-            <span class="text-xs text-slate-400">Polling every 2s</span>
+            <span class="text-xs font-medium uppercase tracking-wider text-slate-400">{i18n.t.detail.cpuUsage}</span>
+            <span class="text-xs text-slate-400">{i18n.t.detail.polling2s}</span>
           </div>
           <p class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
             {stats ? `${stats.cpu_percent.toFixed(2)}%` : loadingStats ? "..." : "—"}
@@ -556,9 +591,9 @@
 
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Memory Usage</span>
+            <span class="text-xs font-medium uppercase tracking-wider text-slate-400">{i18n.t.detail.memUsage}</span>
             <span class="font-mono text-xs text-slate-400">
-              {stats && stats.mem_limit_bytes > 0 ? `Limit: ${formatBytes(stats.mem_limit_bytes)}` : ""}
+              {stats && stats.mem_limit_bytes > 0 ? `${i18n.t.detail.limitPrefix} ${formatBytes(stats.mem_limit_bytes)}` : ""}
             </span>
           </div>
           <p class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
@@ -589,40 +624,40 @@
       </div>
     {/if}
   {:else if inspectLoading && !info}
-    <p class="text-sm text-slate-500 dark:text-slate-400">Loading container details...</p>
+    <p class="text-sm text-slate-500 dark:text-slate-400">{i18n.t.detail.loadingDetails}</p>
   {:else if inspectError}
     <p class="text-sm text-rose-600 dark:text-rose-400">{inspectError}</p>
   {:else if info}
     {#if activeTab === "inspect"}
       <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/50">
-          <dt class="text-[11px] font-medium uppercase text-slate-400">Image</dt>
+          <dt class="text-[11px] font-medium uppercase text-slate-400">{i18n.t.detail.inspectImage}</dt>
           <dd class="mt-1 font-mono text-xs text-slate-800 dark:text-slate-200">{info.image}</dd>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/50">
-          <dt class="text-[11px] font-medium uppercase text-slate-400">State & Status</dt>
+          <dt class="text-[11px] font-medium uppercase text-slate-400">{i18n.t.detail.inspectState}</dt>
           <dd class="mt-1 text-xs text-slate-800 dark:text-slate-200">{info.state} ({info.status})</dd>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/50">
-          <dt class="text-[11px] font-medium uppercase text-slate-400">IP Address</dt>
+          <dt class="text-[11px] font-medium uppercase text-slate-400">{i18n.t.detail.inspectIp}</dt>
           <dd class="mt-1 font-mono text-xs text-slate-800 dark:text-slate-200">{info.ip_address || "—"}</dd>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/50">
-          <dt class="text-[11px] font-medium uppercase text-slate-400">Networks</dt>
+          <dt class="text-[11px] font-medium uppercase text-slate-400">{i18n.t.detail.inspectNetworks}</dt>
           <dd class="mt-1 font-mono text-xs text-slate-800 dark:text-slate-200">
             {info.networks.length > 0 ? info.networks.join(", ") : "—"}
           </dd>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/50">
-          <dt class="text-[11px] font-medium uppercase text-slate-400">Restart Policy</dt>
+          <dt class="text-[11px] font-medium uppercase text-slate-400">{i18n.t.detail.inspectRestart}</dt>
           <dd class="mt-1 font-mono text-xs text-slate-800 dark:text-slate-200">{info.restart_policy}</dd>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/50">
-          <dt class="text-[11px] font-medium uppercase text-slate-400">Created</dt>
+          <dt class="text-[11px] font-medium uppercase text-slate-400">{i18n.t.detail.inspectCreated}</dt>
           <dd class="mt-1 text-xs text-slate-800 dark:text-slate-200">{formatIsoDate(info.created)}</dd>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:col-span-2 dark:border-slate-800 dark:bg-slate-900/50">
-          <dt class="text-[11px] font-medium uppercase text-slate-400">Entrypoint / Cmd</dt>
+          <dt class="text-[11px] font-medium uppercase text-slate-400">{i18n.t.detail.inspectCmd}</dt>
           <dd class="mt-1 break-all font-mono text-xs text-slate-800 dark:text-slate-200">
             {[...info.entrypoint, ...info.cmd].join(" ") || "—"}
           </dd>
@@ -631,13 +666,13 @@
     {:else if activeTab === "env"}
       <div class="space-y-3">
         <div class="flex items-center justify-between gap-3">
-          <SearchInput bind:value={envQuery} placeholder="Filter environment variables..." />
-          <span class="text-xs text-slate-400">{filteredEnv.length} variables</span>
+          <SearchInput bind:value={envQuery} placeholder={i18n.t.detail.filterEnvPlaceholder} />
+          <span class="text-xs text-slate-400">{i18n.t.detail.envCount(filteredEnv.length)}</span>
         </div>
 
         {#if filteredEnv.length === 0}
           <p class="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-            No matching environment variables.
+            {i18n.t.detail.noMatchingEnv}
           </p>
         {:else}
           <div class="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900/50">
@@ -669,7 +704,7 @@
     {:else if activeTab === "mounts"}
       {#if info.mounts.length === 0}
         <p class="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-          No mounts configured.
+          {i18n.t.detail.noMounts}
         </p>
       {:else}
         <div class="space-y-2.5">

@@ -135,6 +135,13 @@ pub(super) async fn dispatch_request<E: WslExecutor>(
             }
         }
         ControlRequest::GetEngineMetrics => ControlResponse::EngineMetrics(ctx.metrics()),
+        ControlRequest::SetKeepAwake { enabled } => {
+            ctx.keep_awake.store(enabled, Ordering::Relaxed);
+            if enabled {
+                ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
+            }
+            ControlResponse::Ack
+        }
         ControlRequest::ListWslDistros => {
             let distro = ctx.config.read().await.distro_name.clone();
             match list_user_wsl_distros(ctx.wsl.as_ref(), &distro).await {

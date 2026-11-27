@@ -78,12 +78,12 @@
     fill="none"
     stroke="currentColor"
     stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
   >
-    <path
-      d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"
-    />
-    <path d="m3.3 7 8.7 5 8.7-5" />
-    <path d="M12 22V12" />
+    <rect x="3" y="4" width="18" height="7" rx="1.5" />
+    <rect x="3" y="13" width="18" height="7" rx="1.5" />
+    <path d="M8 7.5v0M12 7.5v0M8 16.5v0M12 16.5v0" />
   </svg>
 {:else if name === "images"}
   <svg

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { i18n } from "../i18n/index.svelte";
+  import { trapModalTab } from "../utils/focusTrap";
   import Icon from "./Icon.svelte";
 
   let {
@@ -22,10 +23,24 @@
     onCancel: () => void;
   } = $props();
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape" && !busy) {
-      onCancel();
+  let dialogEl = $state<HTMLDivElement | null>(null);
+  let cancelBtnEl = $state<HTMLButtonElement | null>(null);
+
+  $effect(() => {
+    if (open) {
+      queueMicrotask(() => {
+        cancelBtnEl?.focus();
+      });
     }
+  });
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (!open) return;
+    if (e.key === "Escape" && !busy) {
+      onCancel();
+      return;
+    }
+    trapModalTab(e, dialogEl);
   }
 
   function handleBackdropClick(e: MouseEvent) {
@@ -47,7 +62,10 @@
     tabindex="-1"
     aria-label={title}
   >
-    <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+    <div
+      bind:this={dialogEl}
+      class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+    >
       <div class="flex items-start gap-3.5">
         <div
           class={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
@@ -66,6 +84,7 @@
 
       <div class="mt-6 flex justify-end gap-2.5">
         <button
+          bind:this={cancelBtnEl}
           type="button"
           onclick={onCancel}
           disabled={busy}

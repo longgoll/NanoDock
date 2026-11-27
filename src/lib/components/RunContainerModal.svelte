@@ -1,6 +1,7 @@
 <script lang="ts">
   import { i18n } from "../i18n/index.svelte";
   import { engineStore } from "../stores/engine.svelte";
+  import { trapModalTab } from "../utils/focusTrap";
   import Icon from "./Icon.svelte";
 
   let {
@@ -20,6 +21,9 @@
   let ports = $state("");
   let env = $state("");
   let firstInput = $state<HTMLInputElement | null>(null);
+  let dialogEl = $state<HTMLFormElement | null>(null);
+
+  const isSubmitting = $derived(engineStore.isPending("container:run"));
 
   const localTags = $derived(
     engineStore.images.flatMap((img) =>
@@ -77,13 +81,16 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape" && !engineStore.busy) {
+    if (!open) return;
+    if (e.key === "Escape" && !isSubmitting) {
       onClose();
+      return;
     }
+    trapModalTab(e, dialogEl);
   }
 
   function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget && !engineStore.busy) {
+    if (e.target === e.currentTarget && !isSubmitting) {
       onClose();
     }
   }
@@ -102,6 +109,7 @@
     aria-label="Run New Container"
   >
     <form
+      bind:this={dialogEl}
       onsubmit={handleSubmit}
       class="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
     >
@@ -203,20 +211,20 @@
         <button
           type="button"
           onclick={onClose}
-          disabled={engineStore.busy}
+          disabled={isSubmitting}
           class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         >
           {i18n.t.common.cancel}
         </button>
         <button
           type="submit"
-          disabled={engineStore.busy || !imageRef.trim()}
+          disabled={isSubmitting || engineStore.engineBusy || !imageRef.trim()}
           class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
         >
-          {#if engineStore.isPending("container:run")}
+          {#if isSubmitting}
             <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
           {/if}
-          {engineStore.isPending("container:run") ? i18n.t.modals.runStarting : i18n.t.containers.runContainer}
+          {isSubmitting ? i18n.t.modals.runStarting : i18n.t.containers.runContainer}
         </button>
       </div>
     </form>

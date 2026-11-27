@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -23,6 +23,8 @@ pub struct AppContext<E: WslExecutor> {
     pub active_streams: Arc<AtomicUsize>,
     pub hibernate_count: Arc<AtomicU64>,
     pub total_reclaimed_bytes: Arc<AtomicU64>,
+    pub keep_awake: Arc<AtomicBool>,
+    pub idle_remaining_secs: Arc<AtomicU64>,
     pub started_at: Instant,
     pub shutdown: CancellationToken,
     pub events: broadcast::Sender<DaemonEvent>,
@@ -62,6 +64,8 @@ impl<E: WslExecutor> AppContext<E> {
             active_streams: Arc::new(AtomicUsize::new(0)),
             hibernate_count: Arc::new(AtomicU64::new(0)),
             total_reclaimed_bytes: Arc::new(AtomicU64::new(0)),
+            keep_awake: Arc::new(AtomicBool::new(false)),
+            idle_remaining_secs: Arc::new(AtomicU64::new(u64::MAX)),
             started_at: Instant::now(),
             shutdown: CancellationToken::new(),
             events,
@@ -69,10 +73,18 @@ impl<E: WslExecutor> AppContext<E> {
     }
 
     pub fn metrics(&self) -> EngineMetrics {
+        let remaining_raw = self.idle_remaining_secs.load(Ordering::Relaxed);
+        let keep_awake = self.keep_awake.load(Ordering::Relaxed);
         EngineMetrics {
             hibernate_count: self.hibernate_count.load(Ordering::Relaxed),
             total_reclaimed_bytes: self.total_reclaimed_bytes.load(Ordering::Relaxed),
             uptime_secs: self.started_at.elapsed().as_secs(),
+            keep_awake,
+            idle_remaining_secs: if keep_awake || remaining_raw == u64::MAX {
+                None
+            } else {
+                Some(remaining_raw)
+            },
         }
     }
 

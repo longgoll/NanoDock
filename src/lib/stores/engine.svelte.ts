@@ -14,8 +14,36 @@ import {
 } from "../api/daemon";
 
 export type ThemeMode = "light" | "dark";
+export type AppTab =
+  | "dashboard"
+  | "containers"
+  | "images"
+  | "volumes"
+  | "networks"
+  | "storage"
+  | "settings";
+export type ContainerDetailTab =
+  | "logs"
+  | "stats"
+  | "inspect"
+  | "env"
+  | "mounts"
+  | "terminal"
+  | "files";
+
+export interface ToastItem {
+  id: number;
+  kind: "error" | "notice";
+  message: string;
+  source?: "connection" | "action";
+}
 
 class EngineStore {
+  activeTab = $state<AppTab>("dashboard");
+  detailContainerId = $state<string | null>(null);
+  detailInitialTab = $state<ContainerDetailTab>("logs");
+  settingsDirty = $state<boolean>(false);
+
   state = $state<EngineState>("stopped");
   runningContainers = $state<number>(0);
   vhdxSizeBytes = $state<number | null>(null);
@@ -30,23 +58,131 @@ class EngineStore {
   loadingResources = $state<boolean>(false);
   autoRefresh = $state<boolean>(true);
   pullingRef = $state<string | null>(null);
-  error = $state<string | null>(null);
+  toasts = $state<ToastItem[]>([]);
+  connectionError = $state<string | null>(null);
+  private _error = $state<string | null>(null);
   notice = $state<string | null>(null);
   theme = $state<ThemeMode>("light");
-  private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  private nextToastId = 1;
+  private toastTimers = new Map<number, ReturnType<typeof setTimeout>>();
   private refreshingAll = false;
 
-  setNotice(msg: string | null) {
-    if (this.noticeTimer) {
-      clearTimeout(this.noticeTimer);
-      this.noticeTimer = null;
-    }
-    this.notice = msg;
+  get error(): string | null {
+    return this._error;
+  }
+
+  set error(msg: string | null) {
+    this._error = msg;
     if (msg) {
-      this.noticeTimer = setTimeout(() => {
-        if (this.notice === msg) this.notice = null;
-      }, 4000);
+      this.pushToast("error", msg, "action");
     }
+  }
+
+  private pushToast(kind: "error" | "notice", message: string, source: "connection" | "action" = "action") {
+    if (source === "connection") {
+      // Replace existing connection error toast instead of stacking
+      const existing = this.toasts.find((t) => t.source === "connection");
+      if (existing && existing.message === message) return;
+      this.toasts = this.toasts.filter((t) => t.source !== "connection");
+    } else {
+      // Deduplicate identical consecutive toast
+      const last = this.toasts[this.toasts.length - 1];
+      if (last && last.kind === kind && last.message === message) return;
+    }
+
+    const id = this.nextToastId++;
+    const next = [...this.toasts, { id, kind, message, source }];
+    while (next.length > 4) {
+      const removed = next.shift();
+      if (removed) {
+        const timer = this.toastTimers.get(removed.id);
+        if (timer) {
+          clearTimeout(timer);
+          this.toastTimers.delete(removed.id);
+        }
+      }
+    }
+    this.toasts = next;
+
+    if (kind === "notice") {
+      const timer = setTimeout(() => {
+        this.dismissToast(id);
+      }, 4000);
+      this.toastTimers.set(id, timer);
+    }
+  }
+
+  dismissToast(id: number) {
+    const timer = this.toastTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this.toastTimers.delete(id);
+    }
+    const target = this.toasts.find((t) => t.id === id);
+    this.toasts = this.toasts.filter((t) => t.id !== id);
+    if (target?.kind === "error") {
+      const remainingError = this.toasts.filter((t) => t.kind === "error").pop();
+      this._error = remainingError?.message ?? null;
+      if (target.source === "connection") {
+        this.connectionError = null;
+      }
+    } else if (target?.kind === "notice") {
+      const remainingNotice = this.toasts.filter((t) => t.kind === "notice").pop();
+      this.notice = remainingNotice?.message ?? null;
+    }
+  }
+
+  private clearConnectionError() {
+    this.connectionError = null;
+    const connToasts = this.toasts.filter((t) => t.source === "connection");
+    if (connToasts.length > 0) {
+      this.toasts = this.toasts.filter((t) => t.source !== "connection");
+    }
+  }
+
+  private setConnectionError(msg: string) {
+    this.connectionError = msg;
+    this.pushToast("error", msg, "connection");
+  }
+
+  findContainerIdByName(nameOrId: string): string | null {
+    const normalized = nameOrId.replace(/^\//, "");
+    const match = this.containers.find(
+      (c) =>
+        c.id === nameOrId ||
+        c.id.startsWith(normalized) ||
+        c.names.some((n) => n.replace(/^\//, "") === normalized),
+    );
+    return match ? match.id : null;
+  }
+
+  openContainerDetail(idOrName: string, tab: ContainerDetailTab = "logs") {
+    const resolved = this.findContainerIdByName(idOrName) ?? idOrName;
+    this.detailInitialTab = tab;
+    this.detailContainerId = resolved;
+    this.activeTab = "containers";
+  }
+
+  closeContainerDetail() {
+    this.detailContainerId = null;
+  }
+
+  setNotice(msg: string | null) {
+    this.notice = msg;
+    if (msg === null) {
+      for (const t of this.toasts) {
+        if (t.kind === "notice") {
+          const timer = this.toastTimers.get(t.id);
+          if (timer) {
+            clearTimeout(timer);
+            this.toastTimers.delete(t.id);
+          }
+        }
+      }
+      this.toasts = this.toasts.filter((t) => t.kind !== "notice");
+      return;
+    }
+    this.pushToast("notice", msg, "action");
   }
 
   initTheme() {
@@ -95,12 +231,12 @@ class EngineStore {
           this.runningContainers = resp.data.running_containers;
         }
         this.vhdxSizeBytes = resp.data.vhdx_size_bytes;
-        this.error = null;
-      } else {
-        this.handleError(resp);
+        this.clearConnectionError();
+      } else if (resp.status === "error") {
+        this.setConnectionError(resp.data.message);
       }
     } catch (e) {
-      this.error = String(e);
+      this.setConnectionError(String(e));
     }
   }
 
@@ -127,13 +263,21 @@ class EngineStore {
       const resp = await daemonApi.getConfig();
       if (resp.status === "config") {
         this.config = resp.data;
-        this.error = null;
+        this.clearConnectionError();
       } else {
         this.handleError(resp);
       }
     } catch (e) {
-      this.error = String(e);
+      this.setConnectionError(String(e));
     }
+  }
+
+  get engineBusy(): boolean {
+    return (
+      this.pendingKeys.has("engine:start") ||
+      this.pendingKeys.has("engine:stop") ||
+      this.pendingKeys.has("engine:trim")
+    );
   }
 
   isPending(key: string): boolean {
@@ -208,12 +352,12 @@ class EngineStore {
       if (resp.status === "containers") {
         this.containers = resp.data;
         this.runningContainers = resp.data.filter((c) => c.state === "running").length;
-        this.error = null;
+        this.clearConnectionError();
       } else {
         this.handleError(resp);
       }
     } catch (e) {
-      if (!silent) this.error = String(e);
+      if (!silent) this.setConnectionError(String(e));
     } finally {
       if (!silent) this.loadingResources = false;
     }
@@ -257,12 +401,12 @@ class EngineStore {
       const resp = await daemonApi.listImages();
       if (resp.status === "images") {
         this.images = resp.data;
-        this.error = null;
+        this.clearConnectionError();
       } else {
         this.handleError(resp);
       }
     } catch (e) {
-      if (!silent) this.error = String(e);
+      if (!silent) this.setConnectionError(String(e));
     } finally {
       if (!silent) this.loadingResources = false;
     }
@@ -357,12 +501,12 @@ class EngineStore {
       const resp = await daemonApi.listVolumes();
       if (resp.status === "volumes") {
         this.volumes = resp.data;
-        this.error = null;
+        this.clearConnectionError();
       } else {
         this.handleError(resp);
       }
     } catch (e) {
-      if (!silent) this.error = String(e);
+      if (!silent) this.setConnectionError(String(e));
     } finally {
       if (!silent) this.loadingResources = false;
     }
@@ -512,12 +656,12 @@ class EngineStore {
       const resp = await daemonApi.listNetworks();
       if (resp.status === "networks") {
         this.networks = resp.data;
-        this.error = null;
+        this.clearConnectionError();
       } else {
         this.handleError(resp);
       }
     } catch (e) {
-      if (!silent) this.error = String(e);
+      if (!silent) this.setConnectionError(String(e));
     } finally {
       if (!silent) this.loadingResources = false;
     }

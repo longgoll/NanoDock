@@ -16,6 +16,27 @@
   let previewContent = $state("");
   let previewTruncated = $state(false);
   let previewLoading = $state(false);
+  let copiedKey = $state<"path" | "content" | null>(null);
+
+  const breadcrumbs = $derived.by(() => {
+    const parts = currentPath.split("/").filter(Boolean);
+    return parts.map((label, idx) => ({
+      label,
+      path: `/${parts.slice(0, idx + 1).join("/")}`,
+    }));
+  });
+
+  async function copyText(key: "path" | "content", text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedKey = key;
+      setTimeout(() => {
+        if (copiedKey === key) copiedKey = null;
+      }, 1400);
+    } catch {
+      // ignore
+    }
+  }
 
   async function loadDir(path: string) {
     loading = true;
@@ -73,7 +94,7 @@
 </script>
 
 <div class="flex flex-col gap-3">
-  <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
+  <div class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
     <button
       type="button"
       onclick={goUp}
@@ -82,7 +103,41 @@
     >
       ↑ {i18n.t.detail.filesUp}
     </button>
-    <span class="font-mono text-xs text-slate-800 dark:text-slate-200">{currentPath}</span>
+    <nav aria-label="Container path" class="flex min-w-0 flex-1 flex-wrap items-center gap-1 font-mono text-xs">
+      <button
+        type="button"
+        onclick={() => {
+          previewPath = null;
+          void loadDir("/");
+        }}
+        disabled={loading}
+        class={`rounded px-1.5 py-0.5 transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+          currentPath === "/"
+            ? "font-semibold text-sky-600 dark:text-sky-400"
+            : "text-slate-600 dark:text-slate-300"
+        }`}
+      >
+        /
+      </button>
+      {#each breadcrumbs as crumb, idx (crumb.path)}
+        <span class="text-slate-400">/</span>
+        <button
+          type="button"
+          onclick={() => {
+            previewPath = null;
+            void loadDir(crumb.path);
+          }}
+          disabled={loading}
+          class={`truncate rounded px-1.5 py-0.5 transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+            idx === breadcrumbs.length - 1
+              ? "font-semibold text-sky-600 dark:text-sky-400"
+              : "text-slate-600 dark:text-slate-300"
+          }`}
+        >
+          {crumb.label}
+        </button>
+      {/each}
+    </nav>
     <button
       type="button"
       onclick={() => loadDir(currentPath)}
@@ -101,7 +156,7 @@
   {/if}
 
   <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-    <div class="max-h-96 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-950/70">
+    <div class="h-[calc(100vh-20rem)] min-h-[22rem] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-950/70">
       {#if loading}
         <p class="p-4 text-xs text-slate-500 dark:text-slate-400">{i18n.t.common.loading}</p>
       {:else if entries.length === 0}
@@ -127,17 +182,33 @@
       {/if}
     </div>
 
-    <div class="max-h-96 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs dark:border-slate-800 dark:bg-slate-950">
+    <div class="h-[calc(100vh-20rem)] min-h-[22rem] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs dark:border-slate-800 dark:bg-slate-950">
       {#if !previewPath}
         <p class="text-slate-500">Select a file to preview its contents.</p>
       {:else if previewLoading}
         <p class="text-slate-500 dark:text-slate-400">{i18n.t.common.loading}</p>
       {:else}
-        <div class="mb-2 flex items-center justify-between border-b border-slate-200 pb-1.5 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          <span>{previewPath}</span>
-          {#if previewTruncated}
-            <span class="text-amber-600 dark:text-amber-400">{i18n.t.detail.filesPreviewTruncated}</span>
-          {/if}
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-1.5 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          <span class="truncate">{previewPath}</span>
+          <div class="flex items-center gap-2">
+            {#if previewTruncated}
+              <span class="text-amber-600 dark:text-amber-400">{i18n.t.detail.filesPreviewTruncated}</span>
+            {/if}
+            <button
+              type="button"
+              onclick={() => previewPath && copyText("path", previewPath)}
+              class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              {copiedKey === "path" ? i18n.t.common.copied : "Path"}
+            </button>
+            <button
+              type="button"
+              onclick={() => copyText("content", previewContent)}
+              class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              {copiedKey === "content" ? i18n.t.common.copied : i18n.t.common.copy}
+            </button>
+          </div>
         </div>
         <pre class="whitespace-pre-wrap break-all text-slate-800 dark:text-slate-200">{previewContent}</pre>
       {/if}

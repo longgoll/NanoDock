@@ -147,6 +147,10 @@ pub struct EngineMetrics {
     pub hibernate_count: u64,
     pub total_reclaimed_bytes: u64,
     pub uptime_secs: u64,
+    #[serde(default)]
+    pub keep_awake: bool,
+    #[serde(default)]
+    pub idle_remaining_secs: Option<u64>,
 }
 
 /// Summary of Docker BuildKit / Builder cache usage returned by `/system/df`.

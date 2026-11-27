@@ -10,5 +10,5 @@ pub use ipc::{
     BuildCacheSummary, ContainerActionKind, ContainerFileEntry, ContainerInspect, ContainerMount,
     ContainerStats, ContainerSummary, ControlRequest, ControlResponse, EngineMetrics,
     ExecClientFrame, ExecServerFrame, ImageLayer, ImageSummary, LogStreamFrame, NetworkSummary,
-    RunContainerSpec, VolumeSummary, WslDistroInfo,
+    PullProgressFrame, RunContainerSpec, VolumeSummary, WslDistroInfo,
 };

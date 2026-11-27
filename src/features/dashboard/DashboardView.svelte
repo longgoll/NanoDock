@@ -9,7 +9,6 @@
   import { i18n } from "../../lib/i18n/index.svelte";
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { formatBytes } from "../../lib/utils/format";
-  import DiagnosticsModal from "../settings/DiagnosticsModal.svelte";
 
   type NavTarget = "containers" | "images" | "volumes" | "storage";
 
@@ -17,17 +16,44 @@
 
   let copiedKey = $state<"pipe" | "cli" | null>(null);
   let metrics = $state<EngineMetrics | null>(null);
-  let diagnosticsOpen = $state(false);
+  let togglingKeepAwake = $state(false);
 
   const isStopped = $derived(engineStore.state === "stopped");
+
+  async function refreshMetrics() {
+    try {
+      const res = await daemonApi.getEngineMetrics();
+      if (res.status === "engine_metrics") metrics = res.data;
+    } catch {
+      // ignore transient metrics errors
+    }
+  }
+
+  async function toggleKeepAwake() {
+    if (togglingKeepAwake) return;
+    togglingKeepAwake = true;
+    try {
+      const next = !(metrics?.keep_awake ?? false);
+      const res = await daemonApi.setKeepAwake(next);
+      if (res.status !== "error") {
+        await refreshMetrics();
+      }
+    } finally {
+      togglingKeepAwake = false;
+    }
+  }
 
   onMount(() => {
     if (!engineStore.config) {
       void engineStore.loadConfig();
     }
-    void daemonApi.getEngineMetrics().then((res) => {
-      if (res.status === "engine_metrics") metrics = res.data;
-    }).catch(() => {});
+    void refreshMetrics();
+    const timer = setInterval(() => {
+      if (!document.hidden && engineStore.state === "running") {
+        void refreshMetrics();
+      }
+    }, 10000);
+    return () => clearInterval(timer);
   });
 
   async function copyText(key: "pipe" | "cli", text: string) {
@@ -67,24 +93,51 @@
       </div>
       <div class="flex flex-wrap items-center gap-2.5">
         <StatusBadge state={engineStore.state} />
+        {#if engineStore.state === "running" && metrics?.keep_awake}
+          <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+            {i18n.t.dashboard.keepAwakeActive}
+          </span>
+        {:else if engineStore.state === "running" && metrics?.idle_remaining_secs != null}
+          <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {i18n.t.dashboard.hibernateCountdown(metrics.idle_remaining_secs)}
+          </span>
+        {/if}
         <span class="text-xs text-slate-500 dark:text-slate-400">
           {isStopped ? i18n.t.dashboard.sleepingHint : i18n.t.dashboard.runningHint}
         </span>
       </div>
     </div>
 
-    <div class="flex gap-3">
+    <div class="flex flex-wrap gap-3">
       <RefreshButton
         size="md"
-        onRefresh={() => engineStore.refreshAll(true)}
-        disabled={engineStore.busy}
+        onRefresh={async () => {
+          await engineStore.refreshAll(true);
+          await refreshMetrics();
+        }}
+        disabled={engineStore.engineBusy}
       />
+
+      {#if engineStore.state === "running"}
+        <button
+          type="button"
+          onclick={toggleKeepAwake}
+          disabled={togglingKeepAwake || engineStore.engineBusy}
+          class={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:opacity-50 ${
+            metrics?.keep_awake
+              ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300"
+              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          }`}
+        >
+          {metrics?.keep_awake ? i18n.t.dashboard.keepAwakeActive : i18n.t.dashboard.keepAwake}
+        </button>
+      {/if}
 
       {#if engineStore.state === "stopped"}
         <button
           type="button"
           onclick={() => engineStore.start()}
-          disabled={engineStore.busy}
+          disabled={engineStore.engineBusy}
           class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
         >
           <Icon
@@ -97,7 +150,7 @@
         <button
           type="button"
           onclick={() => engineStore.stop()}
-          disabled={engineStore.busy}
+          disabled={engineStore.engineBusy}
           class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
         >
           <Icon
@@ -113,12 +166,16 @@
   <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
     <button
       type="button"
+      data-card
       onclick={() => onNavigate?.("containers")}
-      class="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
+      class="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
     >
-      <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        {i18n.t.dashboard.runningContainers}
-      </p>
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {i18n.t.dashboard.runningContainers}
+        </p>
+        <Icon name="chevron-right" class="h-3.5 w-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-sky-500 dark:text-slate-600" />
+      </div>
       <p class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
         {isStopped ? "—" : engineStore.runningContainers}
       </p>
@@ -131,12 +188,16 @@
 
     <button
       type="button"
+      data-card
       onclick={() => onNavigate?.("storage")}
-      class="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
+      class="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
     >
-      <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        {i18n.t.dashboard.vhdxSize}
-      </p>
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {i18n.t.dashboard.vhdxSize}
+        </p>
+        <Icon name="chevron-right" class="h-3.5 w-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-sky-500 dark:text-slate-600" />
+      </div>
       <p class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
         {formatBytes(engineStore.vhdxSizeBytes)}
       </p>
@@ -145,12 +206,16 @@
 
     <button
       type="button"
+      data-card
       onclick={() => onNavigate?.("images")}
-      class="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
+      class="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
     >
-      <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        {i18n.t.dashboard.localImages}
-      </p>
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {i18n.t.dashboard.localImages}
+        </p>
+        <Icon name="chevron-right" class="h-3.5 w-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-sky-500 dark:text-slate-600" />
+      </div>
       <p class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
         {isStopped ? "—" : engineStore.images.length}
       </p>
@@ -163,12 +228,16 @@
 
     <button
       type="button"
+      data-card
       onclick={() => onNavigate?.("volumes")}
-      class="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
+      class="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:border-sky-300 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-sky-500/40"
     >
-      <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        {i18n.t.dashboard.volumes}
-      </p>
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {i18n.t.dashboard.volumes}
+        </p>
+        <Icon name="chevron-right" class="h-3.5 w-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-sky-500 dark:text-slate-600" />
+      </div>
       <p class="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
         {isStopped ? "—" : engineStore.volumes.length}
       </p>
@@ -283,44 +352,31 @@
     </div>
   </div>
 
-  <!-- Resource Savings & Diagnostics -->
-  <div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/40">
-    <div class="flex flex-wrap items-center gap-6">
-      <div>
-        <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-          {i18n.t.extra.hibernateCount}
-        </p>
-        <p class="mt-1 text-lg font-bold text-slate-900 dark:text-white">
-          {metrics?.hibernate_count ?? 0}
-        </p>
-      </div>
-      <div>
-        <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-          {i18n.t.extra.reclaimedDisk}
-        </p>
-        <p class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">
-          {formatBytes(metrics?.total_reclaimed_bytes ?? 0)}
-        </p>
-      </div>
-      <div>
-        <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-          {i18n.t.extra.uptime}
-        </p>
-        <p class="mt-1 text-lg font-bold text-slate-900 dark:text-white">
-          {metrics ? `${Math.floor(metrics.uptime_secs / 60)}m` : "—"}
-        </p>
-      </div>
+  <!-- Resource Savings -->
+  <div class="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-900/40">
+    <div>
+      <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+        {i18n.t.extra.hibernateCount}
+      </p>
+      <p class="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+        {metrics?.hibernate_count ?? 0}
+      </p>
     </div>
-
-    <button
-      type="button"
-      onclick={() => (diagnosticsOpen = true)}
-      class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-    >
-      <Icon name="activity" class="h-3.5 w-3.5 text-sky-500" />
-      {i18n.t.extra.runDoctor}
-    </button>
+    <div>
+      <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+        {i18n.t.extra.reclaimedDisk}
+      </p>
+      <p class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">
+        {formatBytes(metrics?.total_reclaimed_bytes ?? 0)}
+      </p>
+    </div>
+    <div>
+      <p class="text-[11px] font-medium uppercase tracking-wider text-slate-400">
+        {i18n.t.extra.uptime}
+      </p>
+      <p class="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+        {metrics ? `${Math.floor(metrics.uptime_secs / 60)}m` : "—"}
+      </p>
+    </div>
   </div>
 </section>
-
-<DiagnosticsModal open={diagnosticsOpen} onClose={() => (diagnosticsOpen = false)} />

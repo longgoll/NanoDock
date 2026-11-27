@@ -88,3 +88,10 @@ pub async fn prune_build_cache() -> Result<ControlResponse, String> {
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn set_keep_awake(enabled: bool) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::SetKeepAwake { enabled })
+        .await
+        .map_err(|e| e.to_string())
+}

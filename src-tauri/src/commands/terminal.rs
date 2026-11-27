@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use shared_types::{ControlRequest, ControlResponse, ExecClientFrame, ExecServerFrame, LogStreamFrame};
+use shared_types::{
+    ControlRequest, ControlResponse, ExecClientFrame, ExecServerFrame, LogStreamFrame,
+    PullProgressFrame,
+};
 use tauri::ipc::Channel;
 use tauri::State;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -252,6 +255,38 @@ pub async fn start_container_stats_stream(
         tokens_map.lock().await.remove(&stream_key);
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn start_pull_image_stream(
+    reference: String,
+    on_frame: Channel<PullProgressFrame>,
+) -> Result<(), String> {
+    let client = open_control_pipe_with_retry()
+        .await
+        .map_err(|e| e.to_string())?;
+    let (reader, mut writer) = tokio::io::split(client);
+    let mut req = serde_json::to_string(&ControlRequest::StreamPullImage { reference })
+        .map_err(|e| e.to_string())?;
+    req.push('\n');
+    writer
+        .write_all(req.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut lines = BufReader::new(reader).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        if let Ok(frame) = serde_json::from_str::<PullProgressFrame>(&line) {
+            let terminal = matches!(
+                frame,
+                PullProgressFrame::Done | PullProgressFrame::Error { .. }
+            );
+            if on_frame.send(frame).is_err() || terminal {
+                break;
+            }
+        }
+    }
     Ok(())
 }
 

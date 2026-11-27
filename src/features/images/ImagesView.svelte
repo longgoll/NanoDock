@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { Channel } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
-  import { daemonApi, type ImageLayer, type ImageSummary } from "../../lib/api/daemon";
+  import { daemonApi, type ImageLayer, type ImageSummary, type PullProgressFrame } from "../../lib/api/daemon";
   import ImageLayersModal from "./ImageLayersModal.svelte";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import EngineSleepingCard from "../../lib/components/EngineSleepingCard.svelte";
@@ -17,12 +18,27 @@
   import { formatBytes, formatTimestamp } from "../../lib/utils/format";
 
   type UsageFilter = "all" | "in_use" | "unused";
+  type ImageSortKey = "name" | "size" | "created";
 
   let query = $state("");
   let pullRef = $state("");
+  let pullingStream = $state(false);
+  let pullStatusText = $state<string | null>(null);
+  let pullLayers = $state<Record<string, { status: string; progress: string | null; pct: number | null }>>({});
   let usageFilter = $state<UsageFilter>("all");
+  let sortKey = $state<ImageSortKey>("created");
+  let sortDir = $state<"asc" | "desc">("desc");
   let selectedIds = $state<Set<string>>(new Set());
   let copiedId = $state<string | null>(null);
+
+  function toggleSort(key: ImageSortKey) {
+    if (sortKey === key) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortKey = key;
+      sortDir = key === "name" ? "asc" : "desc";
+    }
+  }
 
   const confirmState = useConfirm();
 
@@ -64,18 +80,27 @@
   );
 
   const filtered = $derived(
-    engineStore.images.filter((img) => {
-      if (usageFilter === "in_use" && !img.in_use) return false;
-      if (usageFilter === "unused" && img.in_use) return false;
+    engineStore.images
+      .filter((img) => {
+        if (usageFilter === "in_use" && !img.in_use) return false;
+        if (usageFilter === "unused" && img.in_use) return false;
 
-      const q = query.trim().toLowerCase();
-      if (!q) return true;
-      return (
-        img.id.toLowerCase().includes(q) ||
-        img.repo_tags.some((t) => t.toLowerCase().includes(q)) ||
-        img.used_by.some((c) => c.toLowerCase().includes(q))
-      );
-    }),
+        const q = query.trim().toLowerCase();
+        if (!q) return true;
+        return (
+          img.id.toLowerCase().includes(q) ||
+          img.repo_tags.some((t) => t.toLowerCase().includes(q)) ||
+          img.used_by.some((c) => c.toLowerCase().includes(q))
+        );
+      })
+      .sort((a, b) => {
+        const dir = sortDir === "asc" ? 1 : -1;
+        if (sortKey === "size") return (a.size - b.size) * dir;
+        if (sortKey === "created") return (a.created - b.created) * dir;
+        const aName = a.repo_tags[0] && a.repo_tags[0] !== "<none>:<none>" ? a.repo_tags[0] : a.id;
+        const bName = b.repo_tags[0] && b.repo_tags[0] !== "<none>:<none>" ? b.repo_tags[0] : b.id;
+        return aName.localeCompare(bName) * dir;
+      }),
   );
 
   const selectedImages = $derived(
@@ -110,9 +135,9 @@
   function confirmDeleteSingle(img: ImageSummary) {
     const label = img.repo_tags[0] || img.id;
     confirmState.request({
-      title: `Delete image "${label}"?`,
-      message: `This will remove image ${img.id} (${formatBytes(img.size)}) from local storage.`,
-      label: "Delete Image",
+      title: i18n.t.confirm.deleteImageTitle(label),
+      message: i18n.t.confirm.deleteImageMsg(img.id, formatBytes(img.size)),
+      label: i18n.t.confirm.deleteImageBtn,
       danger: true,
       action: async () => {
         await engineStore.removeImage(img.id);
@@ -127,9 +152,9 @@
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     confirmState.request({
-      title: `Delete ${ids.length} unused image(s)?`,
-      message: `This will permanently remove ${ids.length} selected unused image(s).`,
-      label: "Delete Selected",
+      title: i18n.t.confirm.deleteSelectedImagesTitle(ids.length),
+      message: i18n.t.confirm.deleteSelectedImagesMsg(ids.length),
+      label: i18n.t.confirm.deleteSelectedBtn,
       danger: true,
       action: async () => {
         await engineStore.removeImagesBatch(ids);
@@ -140,9 +165,9 @@
 
   function confirmPruneUnused() {
     confirmState.request({
-      title: "Prune all unused images?",
-      message: `Up to ${formatBytes(reclaimableSize)} across ${unusedCount} unused image(s) may be reclaimed. Images currently used by containers will be kept.`,
-      label: "Prune Unused",
+      title: i18n.t.confirm.pruneImagesTitle,
+      message: i18n.t.confirm.pruneImagesMsg(formatBytes(reclaimableSize), unusedCount),
+      label: i18n.t.confirm.pruneBtn,
       danger: false,
       action: async () => {
         await engineStore.pruneImages();
@@ -154,10 +179,56 @@
   async function handlePull(e: SubmitEvent) {
     e.preventDefault();
     const ref = pullRef.trim();
-    if (!ref) return;
-    const ok = await engineStore.pullImage(ref);
-    if (ok) {
-      pullRef = "";
+    if (!ref || pullingStream) return;
+
+    pullingStream = true;
+    pullStatusText = i18n.t.images.pullStarting;
+    pullLayers = {};
+    engineStore.error = null;
+
+    let failed = false;
+    try {
+      const channel = new Channel<PullProgressFrame>();
+      await new Promise<void>((resolve, reject) => {
+        channel.onmessage = (frame) => {
+          if (frame.type === "progress") {
+            pullStatusText = frame.status;
+            if (frame.id) {
+              const pct =
+                frame.current != null && frame.total != null && frame.total > 0
+                  ? Math.min(100, Math.round((frame.current / frame.total) * 100))
+                  : null;
+              pullLayers = {
+                ...pullLayers,
+                [frame.id]: {
+                  status: frame.status,
+                  progress: frame.progress,
+                  pct,
+                },
+              };
+            }
+          } else if (frame.type === "error") {
+            failed = true;
+            engineStore.error = frame.message;
+            resolve();
+          } else if (frame.type === "done") {
+            resolve();
+          }
+        };
+        void daemonApi.startPullImageStream(ref, channel).catch(reject);
+      });
+
+      if (!failed) {
+        engineStore.setNotice(i18n.t.notices.pulledImage(ref));
+        pullRef = "";
+        await engineStore.refreshImages(true);
+      }
+    } catch (err) {
+      engineStore.error = String(err);
+    } finally {
+      pullingStream = false;
+      pullStatusText = null;
+      pullLayers = {};
     }
   }
 
@@ -206,7 +277,7 @@
           <button
             type="button"
             onclick={confirmPruneUnused}
-            disabled={engineStore.busy}
+            disabled={engineStore.engineBusy || engineStore.isPending("images:prune")}
             class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300"
           >
             <Icon
@@ -241,15 +312,45 @@
         />
         <button
           type="submit"
-          disabled={engineStore.pullingRef !== null || !pullRef.trim()}
+          disabled={pullingStream || engineStore.pullingRef !== null || !pullRef.trim()}
           class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-sky-500 disabled:opacity-50"
         >
-          {#if engineStore.pullingRef !== null}
+          {#if pullingStream || engineStore.pullingRef !== null}
             <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
           {/if}
-          {engineStore.pullingRef ? i18n.t.images.pulling : i18n.t.images.pullImage}
+          {pullingStream || engineStore.pullingRef ? i18n.t.images.pulling : i18n.t.images.pullImage}
         </button>
     </form>
+
+    {#if pullingStream}
+      <div class="space-y-2 rounded-2xl border border-sky-200 bg-sky-50/70 p-3.5 text-xs dark:border-sky-500/30 dark:bg-sky-950/25">
+        <div class="flex items-center justify-between font-medium text-sky-900 dark:text-sky-200">
+          <span class="truncate">{pullStatusText ?? i18n.t.images.pulling}</span>
+          <span class="font-mono text-[11px] text-sky-700 dark:text-sky-300">
+            {Object.keys(pullLayers).length} layers
+          </span>
+        </div>
+        {#if Object.keys(pullLayers).length > 0}
+          <div class="max-h-32 space-y-1.5 overflow-y-auto pr-1">
+            {#each Object.entries(pullLayers) as [layerId, info] (layerId)}
+              <div class="space-y-1">
+                <div class="flex items-center justify-between gap-2 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                  <span class="truncate">{layerId}: {info.status}</span>
+                  {#if info.pct !== null}
+                    <span class="shrink-0">{info.pct}%</span>
+                  {/if}
+                </div>
+                {#if info.pct !== null}
+                  <div class="h-1.5 w-full overflow-hidden rounded-full bg-sky-100 dark:bg-slate-800">
+                    <div class="h-full rounded-full bg-sky-500 transition-all" style={`width: ${info.pct}%`}></div>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <!-- Filter & Search Bar -->
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -302,7 +403,7 @@
           <button
             type="button"
             onclick={confirmDeleteSelected}
-            disabled={engineStore.busy}
+            disabled={engineStore.engineBusy || engineStore.isPending("images:batch:remove")}
             class="inline-flex items-center gap-1.5 rounded-md bg-rose-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-rose-500 disabled:opacity-50"
           >
             {#if engineStore.isPending("images:batch:remove")}
@@ -321,24 +422,31 @@
       </div>
     {/if}
 
-    {#if engineStore.pullingRef}
-      <div class="flex items-center gap-2.5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs font-medium text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
-        <Icon name="refresh" class="h-4 w-4 animate-spin" />
-        <span>{i18n.t.images.pulling} <span class="font-mono font-semibold">{engineStore.pullingRef}</span></span>
-      </div>
-    {/if}
-
     <!-- Images Table -->
     {#if filtered.length === 0}
       <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
-        {i18n.t.images.emptyPrefix}
-        <code class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sky-700 dark:bg-slate-800 dark:text-sky-400">
-          nanodock pull alpine
-        </code>.
+        {#if totalCount === 0}
+          {i18n.t.images.emptyPrefix}
+          <code class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sky-700 dark:bg-slate-800 dark:text-sky-400">
+            nanodock pull alpine
+          </code>.
+        {:else}
+          <p>{i18n.t.images.emptyFiltered}</p>
+          <button
+            type="button"
+            onclick={() => {
+              query = "";
+              usageFilter = "all";
+            }}
+            class="mt-3 rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {i18n.t.nav.clearFilter}
+          </button>
+        {/if}
       </div>
     {:else}
       <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900/50">
-        <table class="w-full text-left text-sm">
+        <table class="w-full min-w-[740px] text-left text-sm">
           <thead class="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
             <tr>
               <th class="w-10 px-4 py-3">
@@ -352,11 +460,44 @@
                   class="h-4 w-4 rounded border-slate-300 accent-sky-600 disabled:opacity-40"
                 />
               </th>
-              <th class="px-3 py-3">{i18n.t.images.colRepoTag}</th>
+              <th class="px-3 py-3">
+                <button
+                  type="button"
+                  onclick={() => toggleSort("name")}
+                  class="inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-800 dark:hover:text-slate-200"
+                >
+                  {i18n.t.images.colRepoTag}
+                  {#if sortKey === "name"}
+                    <span class="text-sky-600 dark:text-sky-400">{sortDir === "asc" ? "↑" : "↓"}</span>
+                  {/if}
+                </button>
+              </th>
               <th class="px-3 py-3">{i18n.t.images.colStatus}</th>
               <th class="px-3 py-3">{i18n.t.images.colId}</th>
-              <th class="px-3 py-3">{i18n.t.images.colSize}</th>
-              <th class="px-3 py-3">{i18n.t.images.colCreated}</th>
+              <th class="px-3 py-3">
+                <button
+                  type="button"
+                  onclick={() => toggleSort("size")}
+                  class="inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-800 dark:hover:text-slate-200"
+                >
+                  {i18n.t.images.colSize}
+                  {#if sortKey === "size"}
+                    <span class="text-sky-600 dark:text-sky-400">{sortDir === "asc" ? "↑" : "↓"}</span>
+                  {/if}
+                </button>
+              </th>
+              <th class="px-3 py-3">
+                <button
+                  type="button"
+                  onclick={() => toggleSort("created")}
+                  class="inline-flex items-center gap-1 uppercase tracking-wider hover:text-slate-800 dark:hover:text-slate-200"
+                >
+                  {i18n.t.images.colCreated}
+                  {#if sortKey === "created"}
+                    <span class="text-sky-600 dark:text-sky-400">{sortDir === "asc" ? "↑" : "↓"}</span>
+                  {/if}
+                </button>
+              </th>
               <th class="px-4 py-3 text-right">{i18n.t.images.colActions}</th>
             </tr>
           </thead>
@@ -399,7 +540,7 @@
                     title="Click to copy Image ID"
                     class="font-mono text-xs text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400"
                   >
-                    {copiedId === img.id ? "Copied!" : img.id}
+                    {copiedId === img.id ? i18n.t.common.copied : img.id}
                   </button>
                 </td>
                 <td class="px-3 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
@@ -448,7 +589,7 @@
                         <button
                           type="button"
                           onclick={() => confirmDeleteSingle(img)}
-                          disabled={engineStore.busy}
+                          disabled={engineStore.engineBusy || engineStore.isPending(`image:${img.id}:remove`)}
                           aria-label={`Delete image ${img.repo_tags[0] || img.id}`}
                           class="rounded-lg p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 dark:text-rose-400 dark:hover:bg-rose-500/15"
                         >

@@ -73,7 +73,11 @@ pub fn ensure_wslconfig(
     supports_win11_wsl2_features: bool,
 ) -> Result<(), WslError> {
     let existing = if wslconfig_path.exists() {
-        let backup = wslconfig_path.with_extension("wslconfig.bak");
+        let backup_name = wslconfig_path
+            .file_name()
+            .map(|n| format!("{}.bak", n.to_string_lossy()))
+            .unwrap_or_else(|| ".wslconfig.bak".to_string());
+        let backup = wslconfig_path.with_file_name(backup_name);
         std::fs::copy(wslconfig_path, backup)?;
         std::fs::read_to_string(wslconfig_path)?
     } else {
@@ -149,5 +153,29 @@ mod tests {
         assert!(!merged.contains("networkingMode"));
         assert!(!merged.contains("autoMemoryReclaim"));
         assert!(merged.contains("swap=4096MB"));
+    }
+
+    #[test]
+    fn ensure_wslconfig_creates_dot_bak_and_preserves_custom_keys() {
+        let dir = std::env::temp_dir().join(format!(
+            "nanodock-wslconfig-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg_path = dir.join(".wslconfig");
+        let original = "[wsl2]\nprocessors=4\nmemory=2GB\n";
+        std::fs::write(&cfg_path, original).unwrap();
+
+        ensure_wslconfig(&cfg_path, &WslConfigSpec::default(), true).unwrap();
+
+        let bak_path = dir.join(".wslconfig.bak");
+        assert!(bak_path.exists());
+        assert_eq!(std::fs::read_to_string(&bak_path).unwrap(), original);
+
+        let updated = std::fs::read_to_string(&cfg_path).unwrap();
+        assert!(updated.contains("processors=4"));
+        assert!(updated.contains("memory=4096MB"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

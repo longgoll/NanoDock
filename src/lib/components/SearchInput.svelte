@@ -11,7 +11,29 @@
     placeholder?: string;
     class?: string;
   } = $props();
+
+  let inputEl = $state<HTMLInputElement | null>(null);
+
+  function handleWindowKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      inputEl?.focus();
+      inputEl?.select();
+      return;
+    }
+    if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) {
+        return;
+      }
+      e.preventDefault();
+      inputEl?.focus();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="relative">
   <Icon
@@ -19,6 +41,7 @@
     class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
   />
   <input
+    bind:this={inputEl}
     type="text"
     bind:value
     {placeholder}

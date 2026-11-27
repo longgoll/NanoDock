@@ -9,20 +9,21 @@
   import SettingsView from "./features/settings/SettingsView.svelte";
   import StorageView from "./features/storage/StorageView.svelte";
   import VolumesView from "./features/volumes/VolumesView.svelte";
+  import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import Icon, { type IconName } from "./lib/components/Icon.svelte";
   import QuickGuideModal from "./lib/components/QuickGuideModal.svelte";
   import { i18n } from "./lib/i18n/index.svelte";
-  import { engineStore } from "./lib/stores/engine.svelte";
+  import { engineStore, type AppTab } from "./lib/stores/engine.svelte";
   import { environmentStore } from "./lib/stores/environment.svelte";
   import { updaterStore } from "./lib/stores/updater.svelte";
+  import { createEventRefreshScheduler, type DaemonEventPayload } from "./lib/utils/eventScheduler";
 
-  type Tab = "dashboard" | "containers" | "images" | "volumes" | "networks" | "storage" | "settings";
-  let activeTab = $state<Tab>("dashboard");
   let sidebarCollapsed = $state(false);
   let quickGuideOpen = $state(false);
   let appVersion = $state<string | null>(null);
+  let pendingNavTab = $state<AppTab | null>(null);
 
-  const navItems = $derived<{ id: Tab; label: string; icon: IconName }[]>([
+  const navItems = $derived<{ id: AppTab; label: string; icon: IconName }[]>([
     { id: "dashboard", label: i18n.t.nav.dashboard, icon: "dashboard" },
     { id: "containers", label: i18n.t.nav.containers, icon: "containers" },
     { id: "images", label: i18n.t.nav.images, icon: "images" },
@@ -31,6 +32,38 @@
     { id: "storage", label: i18n.t.nav.storage, icon: "storage" },
     { id: "settings", label: i18n.t.nav.settings, icon: "settings" },
   ]);
+
+  function navigateTo(tab: AppTab) {
+    if (tab === engineStore.activeTab) return;
+    if (engineStore.activeTab === "settings" && engineStore.settingsDirty) {
+      pendingNavTab = tab;
+      return;
+    }
+    engineStore.activeTab = tab;
+  }
+
+  function confirmDiscardSettings() {
+    const target = pendingNavTab;
+    pendingNavTab = null;
+    engineStore.settingsDirty = false;
+    if (target) {
+      engineStore.activeTab = target;
+    }
+  }
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    if (e.key >= "1" && e.key <= "7") {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest(".xterm")) return;
+      const idx = Number.parseInt(e.key, 10) - 1;
+      const item = navItems[idx];
+      if (item) {
+        e.preventDefault();
+        navigateTo(item.id);
+      }
+    }
+  }
 
   onMount(() => {
     engineStore.initTheme();
@@ -59,16 +92,29 @@
       if (!document.hidden) syncAll();
     };
 
+    const scheduler = createEventRefreshScheduler({
+      delayMs: 200,
+      isBlocked: () => document.hidden || engineStore.busy,
+      onWarning: (message) => engineStore.setNotice(message),
+      onFlush: async (plan) => {
+        if (plan.status) {
+          await engineStore.refresh();
+        }
+        if (engineStore.state !== "running") return;
+        const tasks: Promise<unknown>[] = [];
+        if (plan.containers) tasks.push(engineStore.refreshContainers(true));
+        if (plan.images) tasks.push(engineStore.refreshImages(true));
+        if (plan.volumes) tasks.push(engineStore.refreshVolumes(true));
+        if (plan.networks) tasks.push(engineStore.refreshNetworks(true));
+        if (tasks.length > 0) {
+          await Promise.all(tasks);
+        }
+      },
+    });
+
     let unlistenDaemon: UnlistenFn | null = null;
-    void listen<{ type: string; payload?: unknown }>("nanodock://daemon-event", (event) => {
-      const ev = event.payload;
-      if (ev?.type === "warning" && ev.payload && typeof ev.payload === "object" && "message" in ev.payload) {
-        engineStore.setNotice(String((ev.payload as { message: unknown }).message));
-        return;
-      }
-      if (!document.hidden && !engineStore.busy) {
-        void engineStore.refreshAll(true);
-      }
+    void listen<DaemonEventPayload>("nanodock://daemon-event", (event) => {
+      scheduler.handleEvent(event.payload);
     }).then((fn) => {
       unlistenDaemon = fn;
     });
@@ -78,6 +124,7 @@
 
     return () => {
       clearInterval(timer);
+      scheduler.dispose();
       if (unlistenDaemon) unlistenDaemon();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -89,7 +136,7 @@
     localStorage.setItem("nanodock-sidebar-collapsed", String(sidebarCollapsed));
   }
 
-  function navBadge(id: Tab): string | null {
+  function navBadge(id: AppTab): string | null {
     if (engineStore.state === "stopped") return null;
     if (id === "containers" && engineStore.containers.length > 0) {
       return `${engineStore.runningContainers}/${engineStore.containers.length}`;
@@ -107,6 +154,8 @@
   }
 </script>
 
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 <div class="flex h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
   <aside
     class={`flex shrink-0 flex-col justify-between border-r border-slate-200 bg-white transition-all duration-200 dark:border-slate-800 dark:bg-slate-900/60 ${
@@ -114,21 +163,11 @@
     }`}
   >
     <div>
-      <div class={`mb-6 flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between px-2"}`}>
-        <div class="flex items-center gap-2.5" title={appVersion ? `NanoDock v${appVersion}` : "NanoDock"}>
-          <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-sm">
-            <Icon name="logo" class="h-4 w-4" />
-          </div>
-          {#if !sidebarCollapsed}
-            <div>
-              <span class="block text-sm font-bold tracking-tight text-slate-900 dark:text-white">NanoDock</span>
-              <span class="block text-[10px] font-medium text-slate-400">
-                WSL2 Engine{#if appVersion} · v{appVersion}{/if}
-              </span>
-            </div>
-          {/if}
-        </div>
+      <div class={`mb-4 flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between px-2"}`}>
         {#if !sidebarCollapsed}
+          <span class="text-[11px] font-medium tracking-wide text-slate-400">
+            WSL2 Engine{#if appVersion} · v{appVersion}{/if}
+          </span>
           <button
             type="button"
             onclick={toggleSidebar}
@@ -138,21 +177,31 @@
           >
             <Icon name="chevron-left" class="h-4 w-4" />
           </button>
+        {:else}
+          <button
+            type="button"
+            onclick={toggleSidebar}
+            title={i18n.t.nav.expandSidebar}
+            aria-label={i18n.t.nav.expandSidebar}
+            class="flex w-full items-center justify-center rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          >
+            <Icon name="chevron-right" class="h-4 w-4" />
+          </button>
         {/if}
       </div>
 
       <nav class="space-y-1 text-sm" aria-label="Main navigation">
-        {#each navItems as item}
+        {#each navItems as item, idx}
           {@const badge = navBadge(item.id)}
           <button
             type="button"
-            onclick={() => (activeTab = item.id)}
-            title={sidebarCollapsed ? item.label : undefined}
+            onclick={() => navigateTo(item.id)}
+            title={sidebarCollapsed ? `${item.label} (Ctrl+${idx + 1})` : `Ctrl+${idx + 1}`}
             aria-label={item.label}
             class={`flex w-full items-center rounded-lg py-2 transition ${
               sidebarCollapsed ? "justify-center px-2" : "gap-3 px-3 text-left"
             } ${
-              activeTab === item.id
+              engineStore.activeTab === item.id
                 ? "bg-sky-50 font-semibold text-sky-700 dark:bg-sky-500/15 dark:text-sky-400"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-200"
             }`}
@@ -175,27 +224,32 @@
       {#if sidebarCollapsed}
         <button
           type="button"
-          onclick={toggleSidebar}
-          title={i18n.t.nav.expandSidebar}
-          aria-label={i18n.t.nav.expandSidebar}
-          class="flex w-full items-center justify-center rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          onclick={() => (engineStore.state === "stopped" ? engineStore.start() : engineStore.stop())}
+          disabled={engineStore.engineBusy}
+          title={engineStore.state === "stopped" ? i18n.t.nav.startEngine : i18n.t.nav.hibernateEngine}
+          aria-label={engineStore.state === "stopped" ? i18n.t.nav.startEngine : i18n.t.nav.hibernateEngine}
+          class="flex w-full items-center justify-center rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-sky-600 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-sky-400"
         >
-          <Icon name="chevron-right" class="h-4 w-4" />
+          {#if engineStore.isPending("engine:start") || engineStore.isPending("engine:stop")}
+            <Icon name="spinner" class="h-4 w-4 animate-spin text-sky-500" />
+          {:else if engineStore.state === "stopped"}
+            <span class="relative flex h-4 w-4 items-center justify-center">
+              <Icon name="play" class="h-3.5 w-3.5 text-slate-400" />
+            </span>
+          {:else}
+            <span class="relative flex h-4 w-4 items-center justify-center">
+              <span
+                class={`h-2.5 w-2.5 rounded-full ${
+                  engineStore.state === "running"
+                    ? "bg-emerald-500"
+                    : engineStore.state === "error"
+                      ? "bg-rose-500"
+                      : "bg-slate-400"
+                }`}
+              ></span>
+            </span>
+          {/if}
         </button>
-        <div
-          class="flex justify-center py-1"
-          title={`${i18n.t.nav.engine}: ${engineStore.state === "running" ? i18n.t.nav.running : engineStore.state === "stopped" ? i18n.t.nav.sleeping : engineStore.state}`}
-        >
-          <span
-            class={`h-2.5 w-2.5 rounded-full ${
-              engineStore.state === "running"
-                ? "bg-emerald-500"
-                : engineStore.state === "error"
-                  ? "bg-rose-500"
-                  : "bg-slate-400"
-            }`}
-          ></span>
-        </div>
         <button
           type="button"
           onclick={() => (quickGuideOpen = true)}
@@ -220,37 +274,38 @@
       {:else}
         <div class="flex items-center justify-between px-3 py-1.5">
           <span class="text-[11px] font-medium text-slate-400">{i18n.t.nav.engine}</span>
-          <span
-            class={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${
-              engineStore.state === "running"
-                ? "text-emerald-600 dark:text-emerald-400"
-                : engineStore.state === "error"
-                  ? "text-rose-600 dark:text-rose-400"
-                  : "text-slate-500 dark:text-slate-400"
-            }`}
-          >
-            <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-            {engineStore.state === "running"
-              ? i18n.t.nav.running
-              : engineStore.state === "stopped"
-                ? i18n.t.nav.sleeping
-                : engineStore.state}
-          </span>
-        </div>
-        <div class="flex items-center justify-between px-3 py-1">
-          <span class="text-[11px] font-medium text-slate-400">{i18n.t.nav.autoSync}</span>
-          <button
-            type="button"
-            onclick={() => engineStore.toggleAutoRefresh()}
-            aria-label="Toggle auto-sync every 5 seconds"
-            class={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
-              engineStore.autoRefresh
-                ? "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300"
-                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-            }`}
-          >
-            {engineStore.autoRefresh ? "ON" : "OFF"}
-          </button>
+          <div class="flex items-center gap-1.5">
+            <span
+              class={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${
+                engineStore.state === "running"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : engineStore.state === "error"
+                    ? "text-rose-600 dark:text-rose-400"
+                    : "text-slate-500 dark:text-slate-400"
+              }`}
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
+              {engineStore.state === "running"
+                ? i18n.t.nav.running
+                : engineStore.state === "stopped"
+                  ? i18n.t.nav.sleeping
+                  : engineStore.state}
+            </span>
+            <button
+              type="button"
+              onclick={() => (engineStore.state === "stopped" ? engineStore.start() : engineStore.stop())}
+              disabled={engineStore.engineBusy}
+              title={engineStore.state === "stopped" ? i18n.t.nav.startEngine : i18n.t.nav.hibernateEngine}
+              aria-label={engineStore.state === "stopped" ? i18n.t.nav.startEngine : i18n.t.nav.hibernateEngine}
+              class="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-sky-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-sky-400"
+            >
+              {#if engineStore.isPending("engine:start") || engineStore.isPending("engine:stop")}
+                <Icon name="spinner" class="h-3.5 w-3.5 animate-spin text-sky-500" />
+              {:else}
+                <Icon name={engineStore.state === "stopped" ? "play" : "stop"} class="h-3.5 w-3.5" />
+              {/if}
+            </button>
+          </div>
         </div>
         <div class="flex items-center gap-1.5">
           <button
@@ -278,7 +333,13 @@
     </div>
   </aside>
 
-  <main class="relative flex-1 overflow-y-auto p-7">
+  <main
+    class={`relative flex-1 overflow-y-auto ${
+      engineStore.activeTab === "containers" && engineStore.detailContainerId !== null
+        ? "flex flex-col p-3 sm:p-4"
+        : "p-7"
+    }`}
+  >
     {#if engineStore.busy || engineStore.pullingRef || engineStore.loadingResources}
       <div
         aria-hidden="true"
@@ -363,17 +424,17 @@
         </div>
       </div>
     {/if}
-    {#if activeTab === "dashboard"}
-      <DashboardView onNavigate={(tab) => (activeTab = tab)} />
-    {:else if activeTab === "containers"}
+    {#if engineStore.activeTab === "dashboard"}
+      <DashboardView onNavigate={(tab) => navigateTo(tab)} />
+    {:else if engineStore.activeTab === "containers"}
       <ContainersView />
-    {:else if activeTab === "images"}
+    {:else if engineStore.activeTab === "images"}
       <ImagesView />
-    {:else if activeTab === "volumes"}
+    {:else if engineStore.activeTab === "volumes"}
       <VolumesView />
-    {:else if activeTab === "networks"}
+    {:else if engineStore.activeTab === "networks"}
       <NetworksView />
-    {:else if activeTab === "storage"}
+    {:else if engineStore.activeTab === "storage"}
       <StorageView />
     {:else}
       <SettingsView />
@@ -381,49 +442,58 @@
   </main>
 
   <!-- Floating Toast Notifications -->
-  {#if engineStore.error || engineStore.notice}
+  {#if engineStore.toasts.length > 0}
     <div class="fixed right-5 bottom-5 z-40 flex max-w-md flex-col gap-2">
-      {#if engineStore.error}
-        <div
-          role="alert"
-          class="animate-toast-in flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-white/95 px-4 py-3 text-xs text-rose-700 shadow-lg backdrop-blur-xs dark:border-rose-500/30 dark:bg-slate-900/95 dark:text-rose-300"
-        >
-          <div class="flex items-start gap-2">
-            <Icon name="warning" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
-            <span class="leading-relaxed">{engineStore.error}</span>
-          </div>
-          <button
-            type="button"
-            onclick={() => (engineStore.error = null)}
-            aria-label="Dismiss error"
-            class="shrink-0 rounded p-0.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15"
+      {#each engineStore.toasts as toast (toast.id)}
+        {#if toast.kind === "error"}
+          <div
+            role="alert"
+            class="animate-toast-in flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-white/95 px-4 py-3 text-xs text-rose-700 shadow-lg backdrop-blur-xs dark:border-rose-500/30 dark:bg-slate-900/95 dark:text-rose-300"
           >
-            <Icon name="close" class="h-3.5 w-3.5" />
-          </button>
-        </div>
-      {/if}
-
-      {#if engineStore.notice}
-        <div
-          role="status"
-          class="animate-toast-in flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-white/95 px-4 py-3 text-xs text-emerald-700 shadow-lg backdrop-blur-xs dark:border-emerald-500/30 dark:bg-slate-900/95 dark:text-emerald-300"
-        >
-          <div class="flex items-start gap-2">
-            <Icon name="check" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-            <span class="leading-relaxed">{engineStore.notice}</span>
+            <div class="flex items-start gap-2">
+              <Icon name="warning" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
+              <span class="leading-relaxed">{toast.message}</span>
+            </div>
+            <button
+              type="button"
+              onclick={() => engineStore.dismissToast(toast.id)}
+              aria-label="Dismiss error"
+              class="shrink-0 rounded p-0.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15"
+            >
+              <Icon name="close" class="h-3.5 w-3.5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onclick={() => engineStore.setNotice(null)}
-            aria-label="Dismiss notice"
-            class="shrink-0 rounded p-0.5 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/15"
+        {:else}
+          <div
+            role="status"
+            class="animate-toast-in flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-white/95 px-4 py-3 text-xs text-emerald-700 shadow-lg backdrop-blur-xs dark:border-emerald-500/30 dark:bg-slate-900/95 dark:text-emerald-300"
           >
-            <Icon name="close" class="h-3.5 w-3.5" />
-          </button>
-        </div>
-      {/if}
+            <div class="flex items-start gap-2">
+              <Icon name="check" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+              <span class="leading-relaxed">{toast.message}</span>
+            </div>
+            <button
+              type="button"
+              onclick={() => engineStore.dismissToast(toast.id)}
+              aria-label="Dismiss notice"
+              class="shrink-0 rounded p-0.5 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/15"
+            >
+              <Icon name="close" class="h-3.5 w-3.5" />
+            </button>
+          </div>
+        {/if}
+      {/each}
     </div>
   {/if}
 </div>
 
 <QuickGuideModal open={quickGuideOpen} onClose={() => (quickGuideOpen = false)} />
+<ConfirmModal
+  open={pendingNavTab !== null}
+  title={i18n.t.nav.unsavedChangesTitle}
+  message={i18n.t.nav.unsavedChangesMsg}
+  confirmLabel={i18n.t.nav.discardAndLeave}
+  danger={false}
+  onConfirm={confirmDiscardSettings}
+  onCancel={() => (pendingNavTab = null)}
+/>

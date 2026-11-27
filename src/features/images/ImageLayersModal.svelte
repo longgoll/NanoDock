@@ -2,6 +2,7 @@
   import type { ImageLayer } from "../../lib/api/daemon";
   import Icon from "../../lib/components/Icon.svelte";
   import { i18n } from "../../lib/i18n/index.svelte";
+  import { trapModalTab } from "../../lib/utils/focusTrap";
   import { formatBytes } from "../../lib/utils/format";
 
   let {
@@ -18,12 +19,26 @@
     onClose: () => void;
   } = $props();
 
+  let dialogEl = $state<HTMLDivElement | null>(null);
+  let closeBtnEl = $state<HTMLButtonElement | null>(null);
+
+  $effect(() => {
+    if (open) {
+      queueMicrotask(() => closeBtnEl?.focus());
+    }
+  });
+
   const maxLayerSize = $derived(
     Math.max(1, ...layers.map((l) => Math.max(0, l.size))),
   );
 
   function handleKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape") onClose();
+    if (!open) return;
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+    trapModalTab(e, dialogEl);
   }
 </script>
 
@@ -41,13 +56,14 @@
     aria-label={i18n.t.extra.layersTitle}
     class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
   >
-    <div class="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+    <div bind:this={dialogEl} class="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
       <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3.5 dark:border-slate-800">
         <div>
           <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">{i18n.t.extra.layersTitle}</h3>
           <p class="font-mono text-xs text-slate-500 dark:text-slate-400">{imageName}</p>
         </div>
         <button
+          bind:this={closeBtnEl}
           type="button"
           onclick={onClose}
           aria-label={i18n.t.common.cancel}
@@ -61,7 +77,7 @@
         {#if loading}
           <p class="text-xs text-slate-500 dark:text-slate-400">{i18n.t.common.loading}</p>
         {:else if layers.length === 0}
-          <p class="text-xs text-slate-500">No layer history available.</p>
+          <p class="text-xs text-slate-500">{i18n.t.extra.noLayerHistory}</p>
         {:else}
           <div class="space-y-2.5">
             {#each layers as layer, idx}

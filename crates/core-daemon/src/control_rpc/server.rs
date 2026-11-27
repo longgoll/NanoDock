@@ -12,6 +12,7 @@ use crate::app_context::AppContext;
 use super::dispatch::dispatch_request;
 use super::streams::{
     stream_container_logs, stream_container_stats, stream_daemon_events, stream_exec_session,
+    stream_pull_image,
 };
 
 pub const CONTROL_PIPE_NAME: &str = r"\\.\pipe\nanodock_ctl";
@@ -111,6 +112,10 @@ async fn handle_control_client<E: WslExecutor>(
             }
             Ok(ControlRequest::StreamContainerStats { id }) => {
                 stream_container_stats(&mut writer, &ctx, &id).await?;
+                return Ok(());
+            }
+            Ok(ControlRequest::StreamPullImage { reference }) => {
+                stream_pull_image(&mut writer, &ctx, &reference).await?;
                 return Ok(());
             }
             Ok(req) => dispatch_request(req, &ctx).await,

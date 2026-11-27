@@ -6,6 +6,7 @@
   } from "../../lib/api/daemon";
   import Icon from "../../lib/components/Icon.svelte";
   import { i18n } from "../../lib/i18n/index.svelte";
+  import { trapModalTab } from "../../lib/utils/focusTrap";
 
   let {
     open,
@@ -20,6 +21,21 @@
   let dockerdLog = $state("");
   let loading = $state(false);
   let activeLogTab = $state<"daemon" | "dockerd">("daemon");
+  let copied = $state(false);
+  let dialogEl = $state<HTMLDivElement | null>(null);
+  let closeBtnEl = $state<HTMLButtonElement | null>(null);
+
+  async function copyActiveLog() {
+    const text = activeLogTab === "daemon" ? daemonLog : dockerdLog;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+      setTimeout(() => (copied = false), 1500);
+    } catch {
+      // ignore
+    }
+  }
 
   export async function refreshDiagnostics() {
     loading = true;
@@ -41,11 +57,17 @@
   $effect(() => {
     if (open) {
       void refreshDiagnostics();
+      queueMicrotask(() => closeBtnEl?.focus());
     }
   });
 
   function handleKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape") onClose();
+    if (!open) return;
+    if (e.key === "Escape") {
+      onClose();
+      return;
+    }
+    trapModalTab(e, dialogEl);
   }
 </script>
 
@@ -63,7 +85,7 @@
     aria-label={i18n.t.extra.diagnosticsTitle}
     class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
   >
-    <div class="flex max-h-[88vh] w-full max-w-4xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+    <div bind:this={dialogEl} class="flex max-h-[88vh] w-full max-w-4xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
       <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3.5 dark:border-slate-800">
         <h3 class="text-sm font-semibold text-slate-900 dark:text-slate-100">{i18n.t.extra.diagnosticsTitle}</h3>
         <div class="flex items-center gap-2">
@@ -77,6 +99,7 @@
             <Icon name="refresh" class={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
           <button
+            bind:this={closeBtnEl}
             type="button"
             onclick={onClose}
             aria-label={i18n.t.common.cancel}
@@ -109,24 +132,35 @@
         </div>
 
         <div>
-          <div class="mb-2 flex items-center gap-2">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                onclick={() => (activeLogTab = "daemon")}
+                class="rounded-md px-3 py-1 text-xs font-medium {activeLogTab === 'daemon'
+                  ? 'bg-sky-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}"
+              >
+                core-daemon.log
+              </button>
+              <button
+                type="button"
+                onclick={() => (activeLogTab = "dockerd")}
+                class="rounded-md px-3 py-1 text-xs font-medium {activeLogTab === 'dockerd'
+                  ? 'bg-sky-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}"
+              >
+                dockerd.log (WSL2)
+              </button>
+            </div>
             <button
               type="button"
-              onclick={() => (activeLogTab = "daemon")}
-              class="rounded-md px-3 py-1 text-xs font-medium {activeLogTab === 'daemon'
-                ? 'bg-sky-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}"
+              onclick={copyActiveLog}
+              disabled={!(activeLogTab === "daemon" ? daemonLog : dockerdLog)}
+              class="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              core-daemon.log
-            </button>
-            <button
-              type="button"
-              onclick={() => (activeLogTab = "dockerd")}
-              class="rounded-md px-3 py-1 text-xs font-medium {activeLogTab === 'dockerd'
-                ? 'bg-sky-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}"
-            >
-              dockerd.log (WSL2)
+              <Icon name={copied ? "check" : "copy"} class="h-3.5 w-3.5" />
+              {copied ? i18n.t.common.copied : i18n.t.common.copy}
             </button>
           </div>
           <pre class="max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-slate-950 p-3 font-mono text-[11px] whitespace-pre-wrap break-all text-slate-200 dark:border-slate-800">{activeLogTab === "daemon"

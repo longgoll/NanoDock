@@ -110,7 +110,7 @@ pub(crate) fn sanitize_path_segment(input: &str) -> anyhow::Result<&str> {
     Ok(trimmed)
 }
 
-pub(in crate::lifecycle) fn percent_encode_query(input: &str) -> String {
+pub(crate) fn percent_encode_query(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for b in input.bytes() {
         match b {

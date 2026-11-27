@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getVersion } from "@tauri-apps/api/app";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { daemonApi, systemApi, type EngineConfig, type WslDistroInfo } from "../../lib/api/daemon";
   import HelpTip from "../../lib/components/HelpTip.svelte";
   import Icon from "../../lib/components/Icon.svelte";
@@ -23,6 +23,9 @@
       mirrored_networking: true,
     },
   };
+
+  type SettingsTab = "general" | "engine" | "system" | "updates";
+  let activeSettingsTab = $state<SettingsTab>("engine");
 
   let saving = $state(false);
   let savingRestart = $state(false);
@@ -138,6 +141,14 @@
     return JSON.stringify(draft) !== JSON.stringify(engineStore.config);
   });
 
+  $effect(() => {
+    engineStore.settingsDirty = isDirty;
+  });
+
+  onDestroy(() => {
+    engineStore.settingsDirty = false;
+  });
+
   const isDefault = $derived(
     JSON.stringify(draft) === JSON.stringify(DEFAULT_CONFIG),
   );
@@ -222,6 +233,30 @@
     </div>
   </div>
 
+  <!-- Settings Sub-navigation Tabs -->
+  <div class="flex flex-wrap items-center gap-1 border-b border-slate-200 pb-2 dark:border-slate-800">
+    {#each [
+      { id: "engine", label: i18n.t.settings.tabEngine, icon: "settings" },
+      { id: "general", label: i18n.t.settings.tabGeneral, icon: "dashboard" },
+      { id: "system", label: i18n.t.settings.tabSystem, icon: "terminal" },
+      { id: "updates", label: i18n.t.settings.tabUpdates, icon: "refresh" },
+    ] as const as tab}
+      <button
+        type="button"
+        onclick={() => (activeSettingsTab = tab.id)}
+        class={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+          activeSettingsTab === tab.id
+            ? "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
+            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        }`}
+      >
+        <Icon name={tab.icon} class="h-3.5 w-3.5" />
+        {tab.label}
+      </button>
+    {/each}
+  </div>
+
+  {#if activeSettingsTab === "general"}
   <!-- Language Preference -->
   <div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
     <div>
@@ -253,6 +288,27 @@
     </div>
   </div>
 
+  <!-- Background Auto-Sync -->
+  <div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-900 dark:text-white">
+        {i18n.t.settings.autoSyncLabel}
+      </h3>
+      <p class="text-xs text-slate-400">
+        {i18n.t.settings.autoSyncDesc}
+      </p>
+    </div>
+    <input
+      type="checkbox"
+      checked={engineStore.autoRefresh}
+      onchange={() => engineStore.toggleAutoRefresh()}
+      aria-label={i18n.t.settings.autoSyncLabel}
+      class="h-4 w-4 shrink-0 accent-sky-600"
+    />
+  </div>
+  {/if}
+
+  {#if activeSettingsTab === "updates"}
   <!-- Application Updates -->
   <div class="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
     <div class="flex flex-wrap items-center justify-between gap-4">
@@ -334,7 +390,9 @@
       </p>
     {/if}
   </div>
+  {/if}
 
+  {#if activeSettingsTab === "system"}
   <!-- System & CLI Integration -->
   <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800">
@@ -471,13 +529,15 @@
       </p>
     {/if}
   </div>
+  {/if}
 
+  {#if activeSettingsTab === "engine"}
   {#if !isConnected}
     <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
       <span>
         {loading
-          ? "Connecting to core-daemon..."
-          : "Core daemon is not connected. Showing default configuration (read-only until connected)."}
+          ? i18n.t.settings.connecting
+          : i18n.t.settings.disconnected}
       </span>
       <button
         type="button"
@@ -485,7 +545,7 @@
         disabled={loading}
         class="rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium text-amber-800 transition hover:bg-amber-50 disabled:opacity-50 dark:border-amber-500/40 dark:bg-slate-900 dark:text-amber-300"
       >
-        Reconnect
+        {i18n.t.settings.reconnect}
       </button>
     </div>
   {/if}
@@ -760,7 +820,9 @@
       </button>
     </div>
   </div>
+  {/if}
 
+  {#if activeSettingsTab === "system"}
   <!-- WSL2 Distro Integration & Diagnostics -->
   <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900/60">
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -802,6 +864,47 @@
       </div>
     {/if}
   </div>
+  {/if}
+
+  {#if isDirty}
+    <div class="sticky bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-white/95 px-5 py-3 shadow-lg backdrop-blur-xs dark:border-amber-500/30 dark:bg-slate-900/95">
+      <div class="flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+        <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+        <span>{i18n.t.settings.unsavedChanges}</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onclick={resetDraft}
+          disabled={saving}
+          class="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          {i18n.t.settings.reset}
+        </button>
+        {#if wslDirty && engineStore.state === "running"}
+          <button
+            type="button"
+            onclick={() => save(true)}
+            disabled={!isConnected || saving || engineStore.busy}
+            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            {saving && savingRestart ? i18n.t.settings.saving : i18n.t.settings.saveAndRestart}
+          </button>
+        {/if}
+        <button
+          type="button"
+          onclick={() => save(false)}
+          disabled={!isConnected || saving || engineStore.busy}
+          class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-medium text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-50"
+        >
+          {#if saving && !savingRestart}
+            <Icon name="spinner" class="h-3.5 w-3.5 animate-spin" />
+          {/if}
+          {saving && !savingRestart ? i18n.t.settings.saving : i18n.t.settings.saveSettings}
+        </button>
+      </div>
+    </div>
+  {/if}
 </section>
 
 <DiagnosticsModal open={diagnosticsOpen} onClose={() => (diagnosticsOpen = false)} />

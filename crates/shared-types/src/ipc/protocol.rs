@@ -24,6 +24,9 @@ pub enum ControlRequest {
         lines: usize,
     },
     GetEngineMetrics,
+    SetKeepAwake {
+        enabled: bool,
+    },
     ListWslDistros,
     SetWslDistroIntegration {
         distro: String,
@@ -72,6 +75,9 @@ pub enum ControlRequest {
     RunContainer(RunContainerSpec),
     ListImages,
     PullImage {
+        reference: String,
+    },
+    StreamPullImage {
         reference: String,
     },
     RemoveImage {
@@ -188,6 +194,23 @@ pub enum LogStreamFrame {
     Line { text: String },
     Error { message: String },
     Ended,
+}
+
+/// Frames sent during real-time Docker image pull streaming.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PullProgressFrame {
+    Progress {
+        id: Option<String>,
+        status: String,
+        progress: Option<String>,
+        current: Option<u64>,
+        total: Option<u64>,
+    },
+    Done,
+    Error {
+        message: String,
+    },
 }
 
 #[cfg(test)]

@@ -26,6 +26,13 @@ pub async fn run_hibernate_watcher<E: WslExecutor + 'static>(ctx: Arc<AppContext
             _ = interval.tick() => {
                 let state = *ctx.state.read().await;
                 if state != EngineState::Running {
+                    ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
+                    idle_since = None;
+                    continue;
+                }
+
+                if ctx.keep_awake.load(Ordering::Relaxed) {
+                    ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
                     idle_since = None;
                     continue;
                 }
@@ -36,12 +43,14 @@ pub async fn run_hibernate_watcher<E: WslExecutor + 'static>(ctx: Arc<AppContext
                 };
 
                 let Some(timeout_secs) = idle_timeout else {
+                    ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
                     idle_since = None;
                     continue;
                 };
 
                 let active_streams = ctx.active_streams.load(Ordering::SeqCst);
                 if active_streams > 0 {
+                    ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
                     idle_since = None;
                     continue;
                 }
@@ -49,9 +58,13 @@ pub async fn run_hibernate_watcher<E: WslExecutor + 'static>(ctx: Arc<AppContext
                 match count_running_containers(&ctx.transport).await {
                     Ok(0) => {
                         let start = idle_since.get_or_insert_with(Instant::now);
-                        debug!(elapsed_secs = start.elapsed().as_secs(), "Engine idle");
-                        if start.elapsed() >= Duration::from_secs(timeout_secs) {
+                        let elapsed = start.elapsed();
+                        let remaining = timeout_secs.saturating_sub(elapsed.as_secs());
+                        ctx.idle_remaining_secs.store(remaining, Ordering::Relaxed);
+                        debug!(elapsed_secs = elapsed.as_secs(), remaining, "Engine idle");
+                        if elapsed >= Duration::from_secs(timeout_secs) {
                             info!(distro = %distro_name, "Idle timeout reached; hibernating WSL2 distro");
+                            ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
                             ctx.set_state(EngineState::Stopping).await;
                             ctx.transport.close_transport().await;
                             if let Err(err) = graceful_hibernate(ctx.wsl.as_ref(), &distro_name).await {
@@ -66,10 +79,12 @@ pub async fn run_hibernate_watcher<E: WslExecutor + 'static>(ctx: Arc<AppContext
                     }
                     Ok(n) => {
                         debug!(running = n, "Containers running; resetting idle timer");
+                        ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
                         idle_since = None;
                     }
                     Err(err) => {
                         debug!(error = %err, "Failed to query running containers");
+                        ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
                         idle_since = None;
                     }
                 }
