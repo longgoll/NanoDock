@@ -1,4 +1,15 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
+
+export type ExecServerFrame =
+  | { type: "started"; exec_id: string }
+  | { type: "output"; data: string }
+  | { type: "exit"; code: number }
+  | { type: "error"; message: string };
+
+export type LogStreamFrame =
+  | { type: "line"; text: string }
+  | { type: "error"; message: string }
+  | { type: "ended" };
 
 export type EngineState = "stopped" | "starting" | "running" | "stopping" | "error";
 
@@ -127,6 +138,12 @@ export interface EngineMetrics {
   uptime_secs: number;
 }
 
+export interface BuildCacheSummary {
+  total_bytes: number;
+  reclaimable_bytes: number;
+  record_count: number;
+}
+
 export interface DoctorCheckItem {
   name: string;
   level: "ok" | "warn" | "fail";
@@ -170,6 +187,7 @@ export type ControlResponse =
     }
   | { status: "container_created"; data: { id: string } }
   | { status: "images"; data: ImageSummary[] }
+  | { status: "build_cache"; data: BuildCacheSummary }
   | { status: "image_layers"; data: ImageLayer[] }
   | { status: "volumes"; data: VolumeSummary[] }
   | { status: "networks"; data: NetworkSummary[] }
@@ -221,9 +239,55 @@ export const daemonApi = {
     invoke<ControlResponse>("import_volume", { name, srcPath }),
   getEngineLogs: (lines = 150) => invoke<ControlResponse>("get_engine_logs", { lines }),
   getEngineMetrics: () => invoke<ControlResponse>("get_engine_metrics"),
+  getBuildCache: () => invoke<ControlResponse>("get_build_cache"),
+  pruneBuildCache: () => invoke<ControlResponse>("prune_build_cache"),
   listWslDistros: () => invoke<ControlResponse>("list_wsl_distros"),
   setWslDistroIntegration: (distro: string, enabled: boolean) =>
     invoke<ControlResponse>("set_wsl_distro_integration", { distro, enabled }),
+  startExecSession: (
+    containerId: string,
+    shell: string | null,
+    cols: number,
+    rows: number,
+    onEvent: Channel<ExecServerFrame>
+  ) =>
+    invoke<string>("start_exec_session", {
+      containerId,
+      shell,
+      cols,
+      rows,
+      onEvent,
+    }),
+  sendExecInput: (sessionId: string, data: string) =>
+    invoke<void>("send_exec_input", { sessionId, data }),
+  resizeExecSession: (sessionId: string, cols: number, rows: number) =>
+    invoke<void>("resize_exec_session", { sessionId, cols, rows }),
+  closeExecSession: (sessionId: string) =>
+    invoke<void>("close_exec_session", { sessionId }),
+  startContainerLogsStream: (
+    streamKey: string,
+    containerId: string,
+    tail: number,
+    onFrame: Channel<LogStreamFrame>
+  ) =>
+    invoke<void>("start_container_logs_stream", {
+      streamKey,
+      containerId,
+      tail,
+      onFrame,
+    }),
+  startContainerStatsStream: (
+    streamKey: string,
+    containerId: string,
+    onStats: Channel<ControlResponse>
+  ) =>
+    invoke<void>("start_container_stats_stream", {
+      streamKey,
+      containerId,
+      onStats,
+    }),
+  stopContainerStream: (streamKey: string) =>
+    invoke<void>("stop_container_stream", { streamKey }),
 };
 
 export const systemApi = {

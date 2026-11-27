@@ -1,9 +1,12 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { Channel } from "@tauri-apps/api/core";
+  import { onDestroy, onMount } from "svelte";
   import {
     daemonApi,
     type ContainerInspect,
     type ContainerStats,
+    type ControlResponse,
+    type LogStreamFrame,
   } from "../../lib/api/daemon";
   import ConfirmModal from "../../lib/components/ConfirmModal.svelte";
   import Icon from "../../lib/components/Icon.svelte";
@@ -95,25 +98,66 @@
     void fetchLogs();
   });
 
-  // Poll logs only when on Logs tab, Live is ON, container is running, and document is visible
+  // Stream logs when on Logs tab, Live is ON, container is running, and document is visible
   $effect(() => {
     if (activeTab !== "logs" || !liveLogs || !isRunning) return;
-    const timer = setInterval(() => {
-      if (document.hidden || loadingLogs) return;
-      void fetchLogs(true);
-    }, 2000);
-    return () => clearInterval(timer);
+    const streamKey = `logs-${containerId}`;
+    let active = true;
+    const channel = new Channel<LogStreamFrame>();
+    let initialized = false;
+    channel.onmessage = (frame) => {
+      if (!active) return;
+      if (frame.type === "line") {
+        if (!initialized) {
+          logsContent = frame.text;
+          initialized = true;
+        } else {
+          logsContent = (logsContent + frame.text).slice(-200_000);
+        }
+        if (logsPre) {
+          queueMicrotask(() => {
+            if (logsPre) logsPre.scrollTop = logsPre.scrollHeight;
+          });
+        }
+      } else if (frame.type === "error") {
+        logsContent = `Error: ${frame.message}`;
+      }
+    };
+    void daemonApi.startContainerLogsStream(streamKey, containerId, logsTail, channel);
+    return () => {
+      active = false;
+      void daemonApi.stopContainerStream(streamKey);
+    };
   });
 
-  // Poll stats only when on Stats tab, container is running, and document is visible
+  // Stream stats when on Stats tab and container is running
   $effect(() => {
     if (activeTab !== "stats" || !isRunning) return;
-    void fetchStats();
-    const timer = setInterval(() => {
-      if (document.hidden || loadingStats) return;
-      void fetchStats();
-    }, 2000);
-    return () => clearInterval(timer);
+    const streamKey = `stats-${containerId}`;
+    let active = true;
+    const channel = new Channel<ControlResponse>();
+    channel.onmessage = (resp) => {
+      if (!active) return;
+      if (resp.status === "container_stats") {
+        stats = resp.data;
+        cpuHistory = [...cpuHistory.slice(-23), resp.data.cpu_percent];
+        const memPct =
+          resp.data.mem_limit_bytes > 0
+            ? (resp.data.mem_usage_bytes / resp.data.mem_limit_bytes) * 100
+            : 0;
+        memHistory = [...memHistory.slice(-23), memPct];
+      }
+    };
+    void daemonApi.startContainerStatsStream(streamKey, containerId, channel);
+    return () => {
+      active = false;
+      void daemonApi.stopContainerStream(streamKey);
+    };
+  });
+
+  onDestroy(() => {
+    void daemonApi.stopContainerStream(`logs-${containerId}`);
+    void daemonApi.stopContainerStream(`stats-${containerId}`);
   });
 
   async function loadInspect() {

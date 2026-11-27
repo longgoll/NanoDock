@@ -10,6 +10,9 @@ use wsl_bridge::WslExecutor;
 use crate::app_context::AppContext;
 
 use super::dispatch::dispatch_request;
+use super::streams::{
+    stream_container_logs, stream_container_stats, stream_daemon_events, stream_exec_session,
+};
 
 pub const CONTROL_PIPE_NAME: &str = r"\\.\pipe\nanodock_ctl";
 
@@ -80,6 +83,36 @@ async fn handle_control_client<E: WslExecutor>(
 
     while let Some(line) = lines.next_line().await? {
         let resp = match serde_json::from_str::<ControlRequest>(&line) {
+            Ok(ControlRequest::SubscribeEvents) => {
+                stream_daemon_events(&mut writer, &ctx).await?;
+                return Ok(());
+            }
+            Ok(ControlRequest::StartExecSession {
+                id,
+                shell,
+                cols,
+                rows,
+            }) => {
+                stream_exec_session(
+                    &mut lines,
+                    &mut writer,
+                    &ctx,
+                    &id,
+                    shell.as_deref(),
+                    cols,
+                    rows,
+                )
+                .await?;
+                return Ok(());
+            }
+            Ok(ControlRequest::StreamContainerLogs { id, tail }) => {
+                stream_container_logs(&mut writer, &ctx, &id, tail).await?;
+                return Ok(());
+            }
+            Ok(ControlRequest::StreamContainerStats { id }) => {
+                stream_container_stats(&mut writer, &ctx, &id).await?;
+                return Ok(());
+            }
             Ok(req) => dispatch_request(req, &ctx).await,
             Err(err) => ControlResponse::Error {
                 message: format!("invalid request: {err}"),
@@ -120,7 +153,12 @@ mod tests {
     #[async_trait]
     impl WslExecutor for MockWsl {
         async fn run(&self, _args: &[&str]) -> Result<CommandOutput, WslError> {
-            Ok(self.responses.lock().unwrap().pop_front().unwrap())
+            Ok(self
+                .responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| ok("")))
         }
     }
 
@@ -177,7 +215,11 @@ mod tests {
     async fn dispatch_start_engine_transitions_state_on_success_and_error() {
         let ctx = AppContext::new(
             EngineConfig::default(),
-            Arc::new(MockWsl::new(vec![ok(""), fail("init failed")])),
+            Arc::new(MockWsl::new(vec![
+                ok(""),
+                ok(env!("CARGO_PKG_VERSION")),
+                fail("init failed"),
+            ])),
         );
 
         assert!(matches!(

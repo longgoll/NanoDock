@@ -1,4 +1,5 @@
 pub mod container_exec;
+pub mod container_files;
 pub mod docker_api;
 pub mod hibernate_watcher;
 pub mod image_layers;

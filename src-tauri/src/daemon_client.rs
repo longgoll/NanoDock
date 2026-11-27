@@ -25,7 +25,7 @@ pub async fn send_control_request(req: ControlRequest) -> anyhow::Result<Control
     Ok(resp)
 }
 
-async fn open_control_pipe_with_retry() -> anyhow::Result<NamedPipeClient> {
+pub(crate) async fn open_control_pipe_with_retry() -> anyhow::Result<NamedPipeClient> {
     const ERROR_PIPE_BUSY: i32 = 231;
     for attempt in 0..20 {
         match ClientOptions::new().open(CONTROL_PIPE_NAME) {

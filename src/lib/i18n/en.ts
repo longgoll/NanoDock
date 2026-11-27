@@ -214,6 +214,13 @@ export const en = {
     reclaimTipTitle: "Reclaim Tip",
     reclaimTipBody:
       "Delete unused images and volumes first, then click Reclaim Disk (fstrim) to shrink the virtual disk file.",
+    buildCacheTitle: "BuildKit Build Cache",
+    buildCacheHint: "Cached layers & build steps stored by Docker BuildKit",
+    buildCacheReclaimable: (reclaimable: string, count: number) =>
+      `${reclaimable} reclaimable across ${count} cache ${count === 1 ? "entry" : "entries"}`,
+    buildCacheSleeping: "Wake the engine to inspect BuildKit cache usage.",
+    pruneBuildCache: "Prune Build Cache",
+    pruningBuildCache: "Pruning...",
   },
   settings: {
     title: "Engine & WSL2 Settings",
@@ -314,6 +321,7 @@ export const en = {
     imagesDeletedBatchError: (n: number, total: number, err: string) =>
       `Deleted ${n}/${total} images. Error: ${err}`,
     imagesPruned: (mb: string) => `Pruned unused images (${mb} MB reclaimed)`,
+    buildCachePruned: (mb: string) => `Pruned BuildKit cache (${mb} MB reclaimed)`,
     volumeCreated: (name: string) => `Volume "${name}" created.`,
     volumeDeleted: (name: string) => `Volume "${name}" deleted.`,
     volumesDeletedBatch: (n: number) => `Deleted ${n} volume${n === 1 ? "" : "s"}.`,

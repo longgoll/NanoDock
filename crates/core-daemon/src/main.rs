@@ -17,7 +17,7 @@ use wsl_bridge::{ensure_distro_imported, ensure_wslconfig, BootstrapOutcome, Sys
 
 use crate::app_context::AppContext;
 use crate::startup::WindowsRegistryStartup;
-use crate::watchers::{DiskReclaimHook, DockerEventHook};
+use crate::watchers::{DiskReclaimHook, DockerEventHook, UiEventHook};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -43,7 +43,8 @@ async fn main() -> anyhow::Result<()> {
     auto_bootstrap_distro(&ctx).await;
 
     let disk_hook: Arc<dyn DockerEventHook> = DiskReclaimHook::spawn(Arc::clone(&ctx));
-    let hooks = vec![disk_hook];
+    let ui_hook: Arc<dyn DockerEventHook> = UiEventHook::new(Arc::clone(&ctx));
+    let hooks = vec![disk_hook, ui_hook];
 
     let docker_task = tokio::spawn(pipe_server::serve_docker_pipe(Arc::clone(&ctx)));
     let control_task = tokio::spawn(control_rpc::serve_control_pipe(Arc::clone(&ctx)));

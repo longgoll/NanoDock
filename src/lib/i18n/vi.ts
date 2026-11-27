@@ -216,6 +216,13 @@ export const vi: Translations = {
     reclaimTipTitle: "Mẹo thu hồi dung lượng",
     reclaimTipBody:
       "Hãy xóa các image và volume không dùng trước, sau đó bấm Thu hồi dung lượng (fstrim) để thu nhỏ file đĩa ảo.",
+    buildCacheTitle: "Bộ nhớ đệm BuildKit",
+    buildCacheHint: "Các layer và bước build được Docker BuildKit lưu đệm",
+    buildCacheReclaimable: (reclaimable: string, count: number) =>
+      `Có thể thu hồi ${reclaimable} trên ${count} mục cache`,
+    buildCacheSleeping: "Đánh thức engine để kiểm tra dung lượng BuildKit cache.",
+    pruneBuildCache: "Dọn Build Cache",
+    pruningBuildCache: "Đang dọn...",
   },
   settings: {
     title: "Cài đặt Engine & WSL2",
@@ -316,6 +323,7 @@ export const vi: Translations = {
     imagesDeletedBatchError: (n: number, total: number, err: string) =>
       `Đã xóa ${n}/${total} images. Lỗi: ${err}`,
     imagesPruned: (mb: string) => `Đã dọn các image chưa dùng (thu hồi ${mb} MB)`,
+    buildCachePruned: (mb: string) => `Đã dọn BuildKit cache (thu hồi ${mb} MB)`,
     volumeCreated: (name: string) => `Đã tạo volume "${name}".`,
     volumeDeleted: (name: string) => `Đã xóa volume "${name}".`,
     volumesDeletedBatch: (n: number) => `Đã xóa ${n} volume.`,

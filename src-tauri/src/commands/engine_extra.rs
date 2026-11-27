@@ -74,3 +74,17 @@ pub async fn set_wsl_distro_integration(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn get_build_cache() -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::GetBuildCache)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn prune_build_cache() -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::PruneBuildCache)
+        .await
+        .map_err(|e| e.to_string())
+}

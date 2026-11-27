@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getVersion } from "@tauri-apps/api/app";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
   import ContainersView from "./features/containers/ContainersView.svelte";
   import DashboardView from "./features/dashboard/DashboardView.svelte";
@@ -52,17 +53,32 @@
       void engineStore.refreshAll(true);
     };
 
-    const timer = setInterval(syncAll, 5000);
+    const timer = setInterval(syncAll, 30000);
     const onFocus = () => syncAll();
     const onVisibilityChange = () => {
       if (!document.hidden) syncAll();
     };
+
+    let unlistenDaemon: UnlistenFn | null = null;
+    void listen<{ type: string; payload?: unknown }>("nanodock://daemon-event", (event) => {
+      const ev = event.payload;
+      if (ev?.type === "warning" && ev.payload && typeof ev.payload === "object" && "message" in ev.payload) {
+        engineStore.setNotice(String((ev.payload as { message: unknown }).message));
+        return;
+      }
+      if (!document.hidden && !engineStore.busy) {
+        void engineStore.refreshAll(true);
+      }
+    }).then((fn) => {
+      unlistenDaemon = fn;
+    });
 
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       clearInterval(timer);
+      if (unlistenDaemon) unlistenDaemon();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };

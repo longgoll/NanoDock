@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use crate::{config::EngineConfig, events::EngineState};
 
 use super::models::{
-    ContainerActionKind, ContainerFileEntry, ContainerInspect, ContainerStats, ContainerSummary,
-    EngineMetrics, ImageLayer, ImageSummary, NetworkSummary, RunContainerSpec, VolumeSummary,
-    WslDistroInfo,
+    BuildCacheSummary, ContainerActionKind, ContainerFileEntry, ContainerInspect, ContainerStats,
+    ContainerSummary, EngineMetrics, ImageLayer, ImageSummary, NetworkSummary, RunContainerSpec,
+    VolumeSummary, WslDistroInfo,
 };
 
 /// Requests sent from the Tauri UI or CLI to `core-daemon` over `\\.\pipe\nanodock_ctl`.
@@ -13,6 +13,7 @@ use super::models::{
 #[serde(tag = "cmd", content = "args", rename_all = "snake_case")]
 pub enum ControlRequest {
     GetStatus,
+    SubscribeEvents,
     StartEngine,
     StopEngine,
     ShutdownDaemon,
@@ -47,6 +48,19 @@ pub enum ControlRequest {
         id: String,
         command: Vec<String>,
     },
+    StartExecSession {
+        id: String,
+        shell: Option<String>,
+        cols: u16,
+        rows: u16,
+    },
+    StreamContainerLogs {
+        id: String,
+        tail: usize,
+    },
+    StreamContainerStats {
+        id: String,
+    },
     ListContainerFiles {
         id: String,
         path: String,
@@ -64,6 +78,8 @@ pub enum ControlRequest {
         id: String,
     },
     PruneImages,
+    GetBuildCache,
+    PruneBuildCache,
     InspectImageLayers {
         id: String,
     },
@@ -133,6 +149,7 @@ pub enum ControlResponse {
         id: String,
     },
     Images(Vec<ImageSummary>),
+    BuildCache(BuildCacheSummary),
     ImageLayers(Vec<ImageLayer>),
     Volumes(Vec<VolumeSummary>),
     Networks(Vec<NetworkSummary>),
@@ -143,6 +160,34 @@ pub enum ControlResponse {
     Error {
         message: String,
     },
+}
+
+/// Frames sent from a Tauri/CLI client to `core-daemon` during an interactive exec session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ExecClientFrame {
+    Input { data: String },
+    Resize { cols: u16, rows: u16 },
+    Close,
+}
+
+/// Frames sent from `core-daemon` to a Tauri/CLI client during an interactive exec session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ExecServerFrame {
+    Started { exec_id: String },
+    Output { data: String },
+    Exit { code: i64 },
+    Error { message: String },
+}
+
+/// Frames sent during real-time container log streaming.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum LogStreamFrame {
+    Line { text: String },
+    Error { message: String },
+    Ended,
 }
 
 #[cfg(test)]

@@ -2,7 +2,9 @@ use shared_types::{ControlRequest, ControlResponse};
 use wsl_bridge::WslExecutor;
 
 use crate::app_context::AppContext;
-use crate::lifecycle::{container_exec, docker_api, image_layers, networks, volume_archive};
+use crate::lifecycle::{
+    container_exec, container_files, docker_api, image_layers, networks, volume_archive,
+};
 
 pub(super) async fn dispatch_docker_request<E: WslExecutor>(
     req: ControlRequest,
@@ -44,13 +46,13 @@ pub(super) async fn dispatch_docker_request<E: WslExecutor>(
             }
         }
         ControlRequest::ListContainerFiles { id, path } => {
-            match container_exec::list_container_files(&ctx.transport, &id, &path).await {
+            match container_files::list_container_files(&ctx.transport, &id, &path).await {
                 Ok(entries) => ControlResponse::ContainerFiles(entries),
                 Err(err) => err_resp(err),
             }
         }
         ControlRequest::ReadContainerFile { id, path } => {
-            match container_exec::read_container_file(&ctx.transport, &id, &path).await {
+            match container_files::read_container_file(&ctx.transport, &id, &path).await {
                 Ok((content, truncated)) => ControlResponse::ContainerFileContent {
                     path,
                     content,
@@ -85,6 +87,18 @@ pub(super) async fn dispatch_docker_request<E: WslExecutor>(
             Ok(reclaimed_bytes) => ControlResponse::PruneResult { reclaimed_bytes },
             Err(err) => err_resp(err),
         },
+        ControlRequest::GetBuildCache => {
+            match docker_api::get_build_cache_summary(&ctx.transport).await {
+                Ok(summary) => ControlResponse::BuildCache(summary),
+                Err(err) => err_resp(err),
+            }
+        }
+        ControlRequest::PruneBuildCache => {
+            match docker_api::prune_build_cache(&ctx.transport).await {
+                Ok(reclaimed_bytes) => ControlResponse::PruneResult { reclaimed_bytes },
+                Err(err) => err_resp(err),
+            }
+        }
         ControlRequest::InspectImageLayers { id } => {
             match image_layers::inspect_image_layers(&ctx.transport, &id).await {
                 Ok(layers) => ControlResponse::ImageLayers(layers),

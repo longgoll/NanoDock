@@ -1,6 +1,7 @@
 import { i18n } from "../i18n/index.svelte";
 import {
   daemonApi,
+  type BuildCacheSummary,
   type ContainerActionKind,
   type ContainerSummary,
   type ControlResponse,
@@ -21,6 +22,7 @@ class EngineStore {
   config = $state<EngineConfig | null>(null);
   containers = $state<ContainerSummary[]>([]);
   images = $state<ImageSummary[]>([]);
+  buildCache = $state<BuildCacheSummary | null>(null);
   volumes = $state<VolumeSummary[]>([]);
   networks = $state<NetworkSummary[]>([]);
   busy = $state<boolean>(false);
@@ -85,6 +87,7 @@ class EngineStore {
         if (this.state === "stopped") {
           this.containers = [];
           this.images = [];
+          this.buildCache = null;
           this.volumes = [];
           this.networks = [];
           this.runningContainers = 0;
@@ -406,6 +409,41 @@ class EngineStore {
       (n) => i18n.t.notices.volumesDeletedBatch(n),
       (n, total, err) => i18n.t.notices.volumesDeletedBatchError(n, total, err),
     );
+  }
+
+  async refreshBuildCache() {
+    if (this.state !== "running") {
+      this.buildCache = null;
+      return;
+    }
+    try {
+      const resp = await daemonApi.getBuildCache();
+      if (resp.status === "build_cache") {
+        this.buildCache = resp.data;
+      } else {
+        this.handleError(resp);
+      }
+    } catch (e) {
+      this.error = String(e);
+    }
+  }
+
+  async pruneBuildCache() {
+    await this.withPending("storage:prune_build_cache", async () => {
+      this.setNotice(null);
+      try {
+        const resp = await daemonApi.pruneBuildCache();
+        if (resp.status === "prune_result") {
+          const mb = (resp.data.reclaimed_bytes / (1024 * 1024)).toFixed(1);
+          this.setNotice(i18n.t.notices.buildCachePruned(mb));
+          await Promise.all([this.refreshBuildCache(), this.refresh()]);
+        } else {
+          this.handleError(resp);
+        }
+      } catch (e) {
+        this.error = String(e);
+      }
+    });
   }
 
   async pruneVolumes() {

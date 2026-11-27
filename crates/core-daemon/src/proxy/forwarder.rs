@@ -187,6 +187,9 @@ where
 
     // Force Connection: close on non-upgrade requests so HTTP/1.1 Keep-Alive
     // pooling cannot bypass /containers/create inspection on subsequent calls.
+    if has_connection_close(&header_str) {
+        return Ok(None);
+    }
     let updated_header = force_connection_close(&header_str);
     let mut out = Vec::with_capacity(updated_header.len() + (buf.len() - header_end));
     out.extend_from_slice(updated_header.as_bytes());
@@ -261,6 +264,17 @@ fn is_upgrade_request(header_str: &str) -> bool {
         }
     }
     false
+}
+
+fn has_connection_close(header_str: &str) -> bool {
+    header_str.lines().any(|line| {
+        line.split_once(':').is_some_and(|(name, val)| {
+            name.trim().eq_ignore_ascii_case("connection")
+                && val
+                    .split(',')
+                    .any(|token| token.trim().eq_ignore_ascii_case("close"))
+        })
+    })
 }
 
 fn force_connection_close(header_str: &str) -> String {
@@ -364,6 +378,13 @@ mod tests {
         let upgrade = b"POST /containers/abc/attach HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n";
         let mut up_buf = upgrade.to_vec();
         assert!(prepare_initial_request(&mut client, &mut up_buf)
+            .await
+            .unwrap()
+            .is_none());
+
+        let already_close = b"GET /_ping HTTP/1.1\r\nHost: docker\r\nConnection: close\r\n\r\n";
+        let mut close_buf = already_close.to_vec();
+        assert!(prepare_initial_request(&mut client, &mut close_buf)
             .await
             .unwrap()
             .is_none());

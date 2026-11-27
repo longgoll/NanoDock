@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use shared_types::{ControlRequest, ControlResponse, EngineState};
+use shared_types::{ControlRequest, ControlResponse, DaemonEvent, EngineState};
 use tracing::{info, warn};
 use wsl_bridge::{
     ensure_wslconfig, graceful_hibernate, list_user_wsl_distros, set_distro_docker_integration,
@@ -34,6 +34,7 @@ pub(super) async fn dispatch_request<E: WslExecutor>(
             match wake_distro(ctx.wsl.as_ref(), &distro).await {
                 Ok(()) => {
                     ctx.set_state(EngineState::Running).await;
+                    check_guest_agent_version(ctx, &distro).await;
                     ControlResponse::Ack
                 }
                 Err(err) => {
@@ -152,5 +153,23 @@ pub(super) async fn dispatch_request<E: WslExecutor>(
             }
         }
         other => dispatch_docker_request(other, ctx).await,
+    }
+}
+
+async fn check_guest_agent_version<E: WslExecutor>(ctx: &AppContext<E>, distro: &str) {
+    let expected = env!("CARGO_PKG_VERSION");
+    if let Ok(out) = ctx
+        .wsl
+        .run(&["-d", distro, "-e", "/usr/local/bin/nanodock-agent", "--version"])
+        .await
+    {
+        let actual = out.stdout.trim();
+        if out.success && !actual.is_empty() && actual != expected {
+            let msg = format!(
+                "WSL2 guest-agent version ({actual}) differs from daemon ({expected}). Consider updating RootFS."
+            );
+            warn!(%actual, %expected, "Guest-agent version mismatch");
+            let _ = ctx.events.send(DaemonEvent::Warning { message: msg });
+        }
     }
 }

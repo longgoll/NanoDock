@@ -171,7 +171,11 @@ pub async fn get_container_stats<E: WslExecutor>(
     let path = format!("/containers/{clean_id}/stats?stream=false");
     let (_, body) = docker_http_request(transport, "GET", &path).await?;
     let val: Value = serde_json::from_slice(&body).context("failed to parse container stats")?;
+    Ok(parse_container_stats_json(clean_id, &val))
+}
 
+/// Parses a Docker `/containers/{id}/stats` JSON object into `ContainerStats`.
+pub fn parse_container_stats_json(clean_id: &str, val: &Value) -> ContainerStats {
     let cpu_total = val
         .pointer("/cpu_stats/cpu_usage/total_usage")
         .and_then(Value::as_u64)
@@ -222,12 +226,12 @@ pub async fn get_container_stats<E: WslExecutor>(
         .and_then(Value::as_u64)
         .unwrap_or(0);
 
-    Ok(ContainerStats {
+    ContainerStats {
         id: clean_id.to_string(),
         cpu_percent,
         mem_usage_bytes,
         mem_limit_bytes,
-    })
+    }
 }
 
 /// Creates and starts a container from an image reference and basic port/env bindings.

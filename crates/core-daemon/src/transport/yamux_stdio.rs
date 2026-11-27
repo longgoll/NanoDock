@@ -86,7 +86,7 @@ impl YamuxStdioTransport {
         let alive_flag = Arc::clone(&alive);
 
         tokio::spawn(async move {
-            let mut conn = Connection::new(stdio.compat(), Config::default(), Mode::Client);
+            let mut conn = Connection::new(stdio.compat(), build_yamux_config(), Mode::Client);
             loop {
                 tokio::select! {
                     msg = cmd_rx.recv() => {
@@ -121,6 +121,14 @@ impl YamuxStdioTransport {
 
         Ok(Self { cmd_tx, alive })
     }
+}
+
+fn build_yamux_config() -> Config {
+    let mut cfg = Config::default();
+    cfg.set_max_num_streams(1024);
+    // 16 MiB connection receive window improves throughput for large docker build/load/archive streams.
+    cfg.set_max_connection_receive_window(Some(16 * 1024 * 1024));
+    cfg
 }
 
 #[async_trait]

@@ -1,15 +1,12 @@
 use anyhow::Context as _;
 use serde_json::Value;
-use shared_types::ContainerFileEntry;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use wsl_bridge::WslExecutor;
 
 use crate::lifecycle::docker_api::{
-    decode_docker_logs, docker_http_json_request, docker_http_request, percent_encode_query,
-    sanitize_path_segment,
+    decode_docker_logs, docker_http_json_request, docker_http_request, sanitize_path_segment,
 };
 use crate::transport::TransportManager;
-
-const MAX_FILE_PREVIEW_BYTES: usize = 64 * 1024;
 
 /// Executes a non-interactive command inside a running container (`exec create` + `exec start`).
 pub async fn exec_container<E: WslExecutor>(
@@ -64,223 +61,120 @@ pub async fn exec_container<E: WslExecutor>(
     Ok((exit_code, output))
 }
 
-/// Lists direct children of a directory inside a container using `GET /containers/{id}/archive`.
-pub async fn list_container_files<E: WslExecutor>(
+/// Starts an interactive TTY exec session (`Connection: Upgrade`) and returns
+/// `(exec_id, initial_bytes, hijacked_stream)`.
+pub async fn start_interactive_exec<E: WslExecutor>(
     transport: &TransportManager<E>,
     id: &str,
-    dir_path: &str,
-) -> anyhow::Result<Vec<ContainerFileEntry>> {
+    shell: Option<&str>,
+    cols: u16,
+    rows: u16,
+) -> anyhow::Result<(String, Vec<u8>, Box<dyn crate::transport::traits::AsyncStream>)> {
     let clean_id = sanitize_path_segment(id)?;
-    let normalized = if dir_path.trim().is_empty() {
-        "/"
-    } else {
-        dir_path.trim()
+    let cmd_shell = shell
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("/bin/sh");
+
+    let create_body = serde_json::json!({
+        "AttachStdin": true,
+        "AttachStdout": true,
+        "AttachStderr": true,
+        "Tty": true,
+        "Env": ["TERM=xterm-256color"],
+        "Cmd": [cmd_shell],
+    });
+    let (_, create_resp) = docker_http_json_request(
+        transport,
+        "POST",
+        &format!("/containers/{clean_id}/exec"),
+        Some(&create_body),
+    )
+    .await?;
+
+    let exec_val: Value =
+        serde_json::from_slice(&create_resp).context("failed to parse exec create response")?;
+    let exec_id = exec_val
+        .get("Id")
+        .and_then(Value::as_str)
+        .context("missing exec Id")?
+        .to_string();
+
+    let start_body = serde_json::to_vec(&serde_json::json!({
+        "Detach": false,
+        "Tty": true,
+    }))?;
+    let mut stream = transport.open_docker_stream().await?;
+    let req = format!(
+        "POST /exec/{exec_id}/start HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Length: {}\r\n\r\n",
+        start_body.len()
+    );
+    stream.write_all(req.as_bytes()).await?;
+    stream.write_all(&start_body).await?;
+
+    let mut buf = Vec::with_capacity(1024);
+    let mut tmp = [0u8; 512];
+    let header_end = loop {
+        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            break pos + 4;
+        }
+        if buf.len() > 16_384 {
+            anyhow::bail!("exec start response headers too large");
+        }
+        let n = stream.read(&mut tmp).await?;
+        if n == 0 {
+            anyhow::bail!("dockerd closed exec stream before upgrade");
+        }
+        buf.extend_from_slice(&tmp[..n]);
     };
-    let encoded = percent_encode_query(normalized);
-    let (_, tar_bytes) = docker_http_request(
-        transport,
-        "GET",
-        &format!("/containers/{clean_id}/archive?path={encoded}"),
-    )
-    .await?;
 
-    Ok(parse_tar_directory_listing(&tar_bytes, normalized))
-}
-
-/// Reads a single file from a container via `GET /containers/{id}/archive`, capped at 64 KiB.
-pub async fn read_container_file<E: WslExecutor>(
-    transport: &TransportManager<E>,
-    id: &str,
-    file_path: &str,
-) -> anyhow::Result<(String, bool)> {
-    let clean_id = sanitize_path_segment(id)?;
-    let encoded = percent_encode_query(file_path.trim());
-    let (_, tar_bytes) = docker_http_request(
-        transport,
-        "GET",
-        &format!("/containers/{clean_id}/archive?path={encoded}"),
-    )
-    .await?;
-
-    extract_first_tar_file(&tar_bytes, MAX_FILE_PREVIEW_BYTES)
-        .context("target path is not a readable regular file")
-}
-
-/// Parses a standard ustar tar archive stream and returns immediate children of `base_dir`.
-pub fn parse_tar_directory_listing(tar: &[u8], base_dir: &str) -> Vec<ContainerFileEntry> {
-    let base_trimmed = base_dir.trim_end_matches('/');
-    let expected_root = base_trimmed
-        .rsplit('/')
+    let status_line = std::str::from_utf8(&buf[..header_end])
+        .unwrap_or("")
+        .lines()
         .next()
-        .filter(|s| !s.is_empty());
-    let mut entries = Vec::new();
-    let mut offset = 0usize;
-    let mut root_prefix: Option<String> = None;
-
-    while offset + 512 <= tar.len() {
-        let header = &tar[offset..offset + 512];
-        if header.iter().all(|&b| b == 0) {
-            break;
-        }
-        let name_part = read_tar_string(&header[0..100]);
-        let prefix_part = read_tar_string(&header[345..500]);
-        let raw_name = if prefix_part.is_empty() {
-            name_part
-        } else {
-            format!("{prefix_part}/{name_part}")
-        };
-        let size = parse_tar_octal(&header[124..136]).unwrap_or(0) as usize;
-        let mode_num = parse_tar_octal(&header[100..108]).unwrap_or(0);
-        let modified = parse_tar_octal(&header[136..148]).unwrap_or(0) as i64;
-        let typeflag = header[156];
-        let is_dir = typeflag == b'5';
-
-        let data_blocks = size.div_ceil(512);
-        offset += 512 + data_blocks * 512;
-
-        if matches!(typeflag, b'x' | b'g' | b'L' | b'K') {
-            continue;
-        }
-
-        let clean_name = raw_name.trim_start_matches("./").trim_end_matches('/');
-        if clean_name.is_empty() || clean_name == "." {
-            continue;
-        }
-        if root_prefix.is_none()
-            && is_dir
-            && !clean_name.contains('/')
-            && expected_root.is_some_and(|root| root == clean_name)
-        {
-            root_prefix = Some(clean_name.to_string());
-            continue;
-        }
-
-        let relative = match &root_prefix {
-            Some(prefix) => clean_name
-                .strip_prefix(prefix)
-                .map(|s| s.trim_start_matches('/'))
-                .unwrap_or(clean_name),
-            None => clean_name,
-        };
-
-        if relative.is_empty() || relative.contains('/') {
-            continue;
-        }
-
-        let full_path = if base_trimmed.is_empty() {
-            format!("/{relative}")
-        } else {
-            format!("{base_trimmed}/{relative}")
-        };
-
-        entries.push(ContainerFileEntry {
-            name: relative.to_string(),
-            path: full_path,
-            is_dir,
-            size: size as u64,
-            mode: format!("{:04o}", mode_num & 0o7777),
-            modified,
-        });
+        .unwrap_or("");
+    let status: u16 = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    if status != 101 && status != 200 {
+        anyhow::bail!("exec upgrade failed with HTTP {status}");
     }
 
-    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.cmp(&b.name)));
-    entries
+    let _ = resize_exec(transport, &exec_id, cols.max(20), rows.max(5)).await;
+    let leftover = buf.split_off(header_end);
+    Ok((exec_id, leftover, stream))
 }
 
-fn extract_first_tar_file(tar: &[u8], max_bytes: usize) -> Option<(String, bool)> {
-    let mut offset = 0usize;
-    while offset + 512 <= tar.len() {
-        let header = &tar[offset..offset + 512];
-        if header.iter().all(|&b| b == 0) {
-            break;
-        }
-        let size = parse_tar_octal(&header[124..136]).unwrap_or(0) as usize;
-        let typeflag = header[156];
-        let data_start = offset + 512;
-        let data_end = (data_start + size).min(tar.len());
-
-        if typeflag == b'0' || typeflag == 0 {
-            let truncated = size > max_bytes;
-            let slice_end = data_start + size.min(max_bytes);
-            let slice = &tar[data_start..slice_end.min(data_end)];
-            return Some((String::from_utf8_lossy(slice).into_owned(), truncated));
-        }
-
-        let data_blocks = size.div_ceil(512);
-        offset += 512 + data_blocks * 512;
-    }
-    None
+/// Resizes an active TTY exec session (`POST /exec/{id}/resize`).
+pub async fn resize_exec<E: WslExecutor>(
+    transport: &TransportManager<E>,
+    exec_id: &str,
+    cols: u16,
+    rows: u16,
+) -> anyhow::Result<()> {
+    let clean_exec = sanitize_path_segment(exec_id)?;
+    let path = format!("/exec/{clean_exec}/resize?h={rows}&w={cols}");
+    let _ = docker_http_request(transport, "POST", &path).await?;
+    Ok(())
 }
 
-fn read_tar_string(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(&bytes[..end]).into_owned()
-}
-
-fn parse_tar_octal(bytes: &[u8]) -> Option<u64> {
-    let s = read_tar_string(bytes);
-    let trimmed = s.trim();
-    if trimmed.is_empty() {
-        return Some(0);
-    }
-    u64::from_str_radix(trimmed, 8).ok()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_tar_header(name: &str, size: usize, typeflag: u8) -> [u8; 512] {
-        let mut hdr = [0u8; 512];
-        hdr[..name.len()].copy_from_slice(name.as_bytes());
-        let mode = b"0000755\0";
-        hdr[100..108].copy_from_slice(mode);
-        let size_oct = format!("{size:011o}\0");
-        hdr[124..136].copy_from_slice(size_oct.as_bytes());
-        hdr[156] = typeflag;
-        hdr
-    }
-
-    #[test]
-    fn parses_tar_directory_listing_and_reads_file() {
-        let mut tar = Vec::new();
-        tar.extend_from_slice(&make_tar_header("app/", 0, b'5'));
-        tar.extend_from_slice(&make_tar_header("app/sub/", 0, b'5'));
-        tar.extend_from_slice(&make_tar_header("app/hello.txt", 5, b'0'));
-        let mut data = [0u8; 512];
-        data[..5].copy_from_slice(b"world");
-        tar.extend_from_slice(&data);
-        tar.extend_from_slice(&make_tar_header("app/sub/nested.txt", 2, b'0'));
-        tar.extend_from_slice(&[0u8; 512]);
-        tar.extend_from_slice(&[0u8; 1024]);
-
-        let listing = parse_tar_directory_listing(&tar, "/app");
-        assert_eq!(listing.len(), 2);
-        assert!(listing[0].is_dir);
-        assert_eq!(listing[0].name, "sub");
-        assert_eq!(listing[1].name, "hello.txt");
-        assert_eq!(listing[1].size, 5);
-
-        let (content, truncated) = extract_first_tar_file(&tar, 1024).unwrap();
-        assert_eq!(content, "world");
-        assert!(!truncated);
-    }
-
-    #[test]
-    fn parses_root_directory_without_skipping_first_folder() {
-        let mut tar = Vec::new();
-        tar.extend_from_slice(&make_tar_header("./", 0, b'5'));
-        tar.extend_from_slice(&make_tar_header("./bin/", 0, b'5'));
-        tar.extend_from_slice(&make_tar_header("./etc/", 0, b'5'));
-        tar.extend_from_slice(&make_tar_header("./etc/hosts", 9, b'0'));
-        tar.extend_from_slice(&[0u8; 512]);
-        tar.extend_from_slice(&[0u8; 1024]);
-
-        let listing = parse_tar_directory_listing(&tar, "/");
-        assert_eq!(listing.len(), 2);
-        assert_eq!(listing[0].name, "bin");
-        assert_eq!(listing[0].path, "/bin");
-        assert_eq!(listing[1].name, "etc");
-        assert_eq!(listing[1].path, "/etc");
-    }
+/// Returns the exit code of a finished exec instance.
+pub async fn inspect_exec_exit_code<E: WslExecutor>(
+    transport: &TransportManager<E>,
+    exec_id: &str,
+) -> i64 {
+    let Ok(clean_exec) = sanitize_path_segment(exec_id) else {
+        return 0;
+    };
+    let Ok((_, resp)) =
+        docker_http_request(transport, "GET", &format!("/exec/{clean_exec}/json")).await
+    else {
+        return 0;
+    };
+    serde_json::from_slice::<Value>(&resp)
+        .ok()
+        .and_then(|v| v.get("ExitCode").and_then(Value::as_i64))
+        .unwrap_or(0)
 }

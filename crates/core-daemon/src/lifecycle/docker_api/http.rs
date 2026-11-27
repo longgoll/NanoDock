@@ -102,7 +102,7 @@ fn parse_http_status(raw: &[u8]) -> Option<u16> {
     status_line.split_whitespace().nth(1)?.parse().ok()
 }
 
-pub(in crate::lifecycle) fn sanitize_path_segment(input: &str) -> anyhow::Result<&str> {
+pub(crate) fn sanitize_path_segment(input: &str) -> anyhow::Result<&str> {
     let trimmed = input.trim();
     if trimmed.is_empty() || trimmed.contains(['/', '\\', ' ', '\r', '\n', '?']) {
         anyhow::bail!("invalid identifier: {input}");
@@ -124,7 +124,7 @@ pub(in crate::lifecycle) fn percent_encode_query(input: &str) -> String {
 }
 
 /// Decodes Docker's 8-byte multiplexed log frames, falling back to plain UTF-8 if unframed.
-pub(in crate::lifecycle) fn decode_docker_logs(raw: &[u8]) -> String {
+pub(crate) fn decode_docker_logs(raw: &[u8]) -> String {
     let mut pos = 0;
     let mut out = String::new();
     while pos + 8 <= raw.len() {

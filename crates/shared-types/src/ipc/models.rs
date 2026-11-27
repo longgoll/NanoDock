@@ -148,3 +148,11 @@ pub struct EngineMetrics {
     pub total_reclaimed_bytes: u64,
     pub uptime_secs: u64,
 }
+
+/// Summary of Docker BuildKit / Builder cache usage returned by `/system/df`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BuildCacheSummary {
+    pub total_bytes: u64,
+    pub reclaimable_bytes: u64,
+    pub record_count: usize,
+}

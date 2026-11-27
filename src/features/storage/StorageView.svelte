@@ -11,9 +11,13 @@
     if (!engineStore.config) {
       void engineStore.loadConfig();
     }
+    if (engineStore.state === "running") {
+      void engineStore.refreshBuildCache();
+    }
   });
 
   const sparseEnabled = $derived(engineStore.config?.wsl.sparse_vhd ?? true);
+  const isRunning = $derived(engineStore.state === "running");
 </script>
 
 <section class="space-y-6">
@@ -40,7 +44,10 @@
     <div class="flex items-center gap-2.5">
       <RefreshButton
         size="md"
-        onRefresh={() => engineStore.refresh()}
+        onRefresh={async () => {
+          await engineStore.refresh();
+          if (isRunning) await engineStore.refreshBuildCache();
+        }}
         disabled={engineStore.busy}
       />
       <button
@@ -81,5 +88,48 @@
         {i18n.t.storage.reclaimTipBody}
       </p>
     </div>
+  </div>
+
+  <div class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/40">
+    <div>
+      <div class="flex items-center gap-1.5">
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {i18n.t.storage.buildCacheTitle}
+        </p>
+        <HelpTip align="left" text={i18n.t.storage.buildCacheHint} />
+      </div>
+      {#if isRunning}
+        <p class="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
+          {formatBytes(engineStore.buildCache?.total_bytes ?? null)}
+        </p>
+        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {#if engineStore.buildCache}
+            {i18n.t.storage.buildCacheReclaimable(
+              formatBytes(engineStore.buildCache.reclaimable_bytes),
+              engineStore.buildCache.record_count,
+            )}
+          {:else}
+            {i18n.t.storage.buildCacheHint}
+          {/if}
+        </p>
+      {:else}
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          {i18n.t.storage.buildCacheSleeping}
+        </p>
+      {/if}
+    </div>
+    <button
+      type="button"
+      onclick={() => engineStore.pruneBuildCache()}
+      disabled={!isRunning || engineStore.busy || engineStore.isPending("storage:prune_build_cache")}
+      class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+    >
+      {#if engineStore.isPending("storage:prune_build_cache")}
+        <Icon name="spinner" class="h-4 w-4 animate-spin" />
+      {/if}
+      {engineStore.isPending("storage:prune_build_cache")
+        ? i18n.t.storage.pruningBuildCache
+        : i18n.t.storage.pruneBuildCache}
+    </button>
   </div>
 </section>

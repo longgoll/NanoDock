@@ -16,6 +16,7 @@ pub enum EngineState {
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum DaemonEvent {
     StateChanged(EngineState),
+    DockerChanged { resource: String, action: String },
     DiskTrimmed { reclaimed_bytes: Option<u64> },
     Warning { message: String },
 }

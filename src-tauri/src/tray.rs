@@ -6,6 +6,7 @@ use shared_types::{ControlRequest, ControlResponse, EngineState};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
+use tokio::sync::watch;
 
 use crate::daemon_client::send_control_request;
 use crate::window_manager::open_or_focus_dashboard;
@@ -13,7 +14,7 @@ use crate::window_manager::open_or_focus_dashboard;
 /// Shared flag set to `true` only when the user explicitly clicks "Quit" in the Tray menu.
 pub struct AllowExit(pub Arc<AtomicBool>);
 
-pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+pub fn setup_tray(app: &AppHandle, notify_rx: watch::Receiver<u64>) -> tauri::Result<()> {
     let open_item = MenuItem::with_id(app, "open", "Open Dashboard", true, None::<&str>)?;
     let start_item = MenuItem::with_id(app, "start", "Start Engine", true, None::<&str>)?;
     let stop_item = MenuItem::with_id(app, "stop", "Stop Engine (0 MB RAM)", true, None::<&str>)?;
@@ -71,7 +72,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
 
-    spawn_tray_status_sync(tray, start_item, stop_item);
+    spawn_tray_status_sync(tray, start_item, stop_item, notify_rx);
     Ok(())
 }
 
@@ -79,11 +80,11 @@ fn spawn_tray_status_sync(
     tray: TrayIcon,
     start_item: MenuItem<tauri::Wry>,
     stop_item: MenuItem<tauri::Wry>,
+    mut notify_rx: watch::Receiver<u64>,
 ) {
     tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        let mut fallback = tokio::time::interval(Duration::from_secs(60));
         loop {
-            interval.tick().await;
             match send_control_request(ControlRequest::GetStatus).await {
                 Ok(ControlResponse::Status {
                     state,
@@ -108,6 +109,15 @@ fn spawn_tray_status_sync(
                     let _ = tray.set_tooltip(Some("NanoDock — Daemon offline"));
                 }
                 _ => {}
+            }
+
+            tokio::select! {
+                _ = fallback.tick() => {}
+                res = notify_rx.changed() => {
+                    if res.is_err() {
+                        break;
+                    }
+                }
             }
         }
     });

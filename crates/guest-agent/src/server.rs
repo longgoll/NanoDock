@@ -16,7 +16,7 @@ use crate::stdio::StdioStream;
 /// to the Docker Unix socket at `socket_path`.
 #[cfg(unix)]
 pub async fn run_yamux_server(stdio: StdioStream, socket_path: &str) -> anyhow::Result<()> {
-    let mut conn = Connection::new(stdio.compat(), Config::default(), Mode::Server);
+    let mut conn = Connection::new(stdio.compat(), build_yamux_config(), Mode::Server);
 
     while let Some(stream) = poll_fn(|cx| conn.poll_next_inbound(cx))
         .await
@@ -43,4 +43,12 @@ async fn forward_stream(stream: yamux::Stream, socket_path: &str) -> anyhow::Res
 
     tokio::io::copy_bidirectional(&mut compat_stream, &mut unix).await?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn build_yamux_config() -> Config {
+    let mut cfg = Config::default();
+    cfg.set_max_num_streams(1024);
+    cfg.set_max_connection_receive_window(Some(16 * 1024 * 1024));
+    cfg
 }

@@ -117,3 +117,79 @@ pub async fn prune_images<E: WslExecutor>(
         .and_then(Value::as_u64)
         .unwrap_or(0))
 }
+
+/// Queries Docker `/system/df` and summarizes BuildKit/Builder cache usage.
+pub async fn get_build_cache_summary<E: WslExecutor>(
+    transport: &TransportManager<E>,
+) -> anyhow::Result<shared_types::BuildCacheSummary> {
+    let (_, body) = docker_http_request(transport, "GET", "/system/df").await?;
+    let val: Value = serde_json::from_slice(&body).unwrap_or_default();
+    Ok(parse_build_cache_df(&val))
+}
+
+/// Prunes unused BuildKit/Builder cache (`POST /build/prune`) and returns reclaimed bytes.
+pub async fn prune_build_cache<E: WslExecutor>(
+    transport: &TransportManager<E>,
+) -> anyhow::Result<u64> {
+    let (_, body) = docker_http_request(transport, "POST", "/build/prune").await?;
+    let val: Value = serde_json::from_slice(&body).unwrap_or_default();
+    Ok(val
+        .get("SpaceReclaimed")
+        .and_then(Value::as_u64)
+        .unwrap_or(0))
+}
+
+fn parse_build_cache_df(val: &Value) -> shared_types::BuildCacheSummary {
+    let Some(records) = val.get("BuildCache").and_then(Value::as_array) else {
+        return shared_types::BuildCacheSummary {
+            total_bytes: 0,
+            reclaimable_bytes: 0,
+            record_count: 0,
+        };
+    };
+
+    let mut total_bytes = 0u64;
+    let mut reclaimable_bytes = 0u64;
+    for rec in records {
+        let size = rec.get("Size").and_then(Value::as_u64).unwrap_or(0);
+        let in_use = rec.get("InUse").and_then(Value::as_bool).unwrap_or(false);
+        total_bytes = total_bytes.saturating_add(size);
+        if !in_use {
+            reclaimable_bytes = reclaimable_bytes.saturating_add(size);
+        }
+    }
+
+    shared_types::BuildCacheSummary {
+        total_bytes,
+        reclaimable_bytes,
+        record_count: records.len(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_build_cache_from_system_df() {
+        let payload = serde_json::json!({
+            "BuildCache": [
+                { "ID": "a", "Size": 1024, "InUse": true },
+                { "ID": "b", "Size": 2048, "InUse": false },
+                { "ID": "c", "Size": 512, "InUse": false }
+            ]
+        });
+        let summary = parse_build_cache_df(&payload);
+        assert_eq!(summary.total_bytes, 3584);
+        assert_eq!(summary.reclaimable_bytes, 2560);
+        assert_eq!(summary.record_count, 3);
+    }
+
+    #[test]
+    fn parses_missing_build_cache_as_zero() {
+        let summary = parse_build_cache_df(&serde_json::json!({}));
+        assert_eq!(summary.total_bytes, 0);
+        assert_eq!(summary.reclaimable_bytes, 0);
+        assert_eq!(summary.record_count, 0);
+    }
+}

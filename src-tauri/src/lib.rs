@@ -1,5 +1,6 @@
 mod commands;
 mod daemon_client;
+mod event_bridge;
 mod tray;
 mod window_manager;
 
@@ -86,6 +87,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AllowExit(Arc::clone(&allow_exit)))
         .manage(daemon_child)
+        .manage(commands::terminal::ExecSessionRegistry::default())
+        .manage(commands::terminal::StreamCancelRegistry::default())
         .setup(move |app| {
             commands::system::auto_configure_cli_on_first_run();
             if let Some(child) = spawn_daemon_if_needed() {
@@ -93,7 +96,9 @@ pub fn run() {
                     *guard = Some(child);
                 }
             }
-            setup_tray(app.handle())?;
+            let (tray_tx, tray_rx) = tokio::sync::watch::channel(0u64);
+            setup_tray(app.handle(), tray_rx)?;
+            event_bridge::spawn_event_bridge(app.handle().clone(), tray_tx);
             let _ = window_manager::open_or_focus_dashboard(app.handle());
             Ok(())
         })
@@ -134,6 +139,8 @@ pub fn run() {
             commands::engine_extra::get_engine_metrics,
             commands::engine_extra::list_wsl_distros,
             commands::engine_extra::set_wsl_distro_integration,
+            commands::engine_extra::get_build_cache,
+            commands::engine_extra::prune_build_cache,
             commands::system::get_environment_status,
             commands::system::install_wsl2,
             commands::system::set_user_path_integration,
@@ -142,6 +149,13 @@ pub fn run() {
             commands::diagnostics::run_doctor_checks,
             commands::diagnostics::set_wincred_creds_store,
             commands::diagnostics::pick_archive_file,
+            commands::terminal::start_exec_session,
+            commands::terminal::send_exec_input,
+            commands::terminal::resize_exec_session,
+            commands::terminal::close_exec_session,
+            commands::terminal::start_container_logs_stream,
+            commands::terminal::start_container_stats_stream,
+            commands::terminal::stop_container_stream,
             prepare_for_update,
         ])
         .build(tauri::generate_context!())

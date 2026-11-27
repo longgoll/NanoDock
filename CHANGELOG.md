@@ -5,6 +5,18 @@ All notable changes to NanoDock will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-27
+
+### Added
+- **Event-Driven UI & Tray Push (`SubscribeEvents`):** Added `UiEventHook` and `ControlRequest::SubscribeEvents` in `core-daemon`, plus `event_bridge` in Tauri (`nanodock://daemon-event`), enabling instant UI & System Tray updates on engine state and Docker resource changes.
+- **Interactive PTY Terminal (`xterm.js`):** Upgraded `ContainerTerminalTab` to a full interactive `@xterm/xterm` + `@xterm/addon-fit` terminal backed by hijacked `Tty: true` Docker exec sessions (`StartExecSession`, `Input`, `Resize`, `Close`).
+- **Real-Time Container Logs & Stats Streaming:** Added `StreamContainerLogs` and `StreamContainerStats` streaming over Tauri Channels in `ContainerDetailView`, replacing 2s polling.
+- **Guest-Agent Version Check:** Added `--version` flag to `guest-agent` and startup compatibility verification on `StartEngine` with `DaemonEvent::Warning` notifications.
+- **Frontend Unit Tests:** Added `vitest` and unit tests for formatting utilities (`pnpm test`).
+
+### Changed
+- **Streaming Container Archive Reader:** Replaced full-buffer archive reads in `list_container_files` and `read_container_file` with O(1)-memory streaming tar parsing in `container_files.rs`.
+
 ## [0.7.1] - 2026-11-26
 
 ### Fixed
