@@ -294,9 +294,20 @@ export const en = {
     autoStartLabel: "Start NanoDock daemon automatically on Windows login",
     wslSection: "WSL2 VM Resources & Networking",
     wslSectionDesc: "Changes below require restarting the WSL2 engine",
+    hostSummary: (ramGb: string, cores: number, os: string, wslVer: string | null) =>
+      `Your machine: ${ramGb} RAM · ${cores} vCPU · ${os}${wslVer ? ` · WSL ${wslVer}` : ""}`,
+    applyRecommended: "Apply Recommended",
+    recommendedBadge: "Recommended",
+    recommendedApplied: "Recommended settings applied (remember to Save).",
     memoryLabel: "WSL2 Memory Limit",
     memoryHelp:
       "Maximum RAM WSL2 may allocate. Memory is claimed dynamically as needed rather than reserved up front.",
+    highMemoryWarning: (hostRamGb: string) =>
+      `Exceeds 70% of host physical RAM (${hostRamGb}) — Windows may slow down under heavy container load.`,
+    cpuLabel: "WSL2 CPU Limit",
+    cpuHelp: "Maximum logical CPU cores allocated to WSL2. Keep Auto to let WSL2 manage cores dynamically.",
+    cpuAuto: "Auto (WSL2 default)",
+    cpuCoresOption: (cores: number) => `${cores} cores`,
     swapLabel: "Swap (Anti-OOM)",
     swapHelp:
       "Disk-backed virtual memory that prevents containers from being killed during sudden RAM spikes.",
@@ -306,6 +317,10 @@ export const en = {
     mirroredNetLabel: "Enable WSL2 mirrored networking mode",
     mirroredNetHelp:
       "Mirrors Windows network interfaces into WSL2 for smoother localhost and VPN connectivity (requires Windows 11 22H2+).",
+    mirroredUnsupportedHint:
+      "Your Windows or WSL version does not fully support Mirrored mode (requires Windows 11 22H2+ & WSL 2.0+).",
+    mirroredVpnHint:
+      "Tip: If containers lose network access behind a corporate VPN, try disabling this option.",
     wslRestartNotice:
       "WSL2 Memory, Swap, Sparse VHD, or Networking changed — restart the engine after saving to apply.",
     saving: "Saving...",

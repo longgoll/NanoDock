@@ -210,6 +210,21 @@ export interface EnvironmentStatus {
   wincred_available: boolean;
 }
 
+export interface HostCapabilities {
+  total_memory_mb: number;
+  cpu_cores: number;
+  windows_build: number | null;
+  windows_label: string;
+  wsl_version: string | null;
+  supports_mirrored_networking: boolean;
+  supports_sparse_vhd: boolean;
+  recommended_memory_mb: number;
+  recommended_swap_mb: number;
+  recommended_processors: number | null;
+  recommended_mirrored_networking: boolean;
+  recommended_sparse_vhd: boolean;
+}
+
 export type ControlResponse =
   | {
       status: "status";
@@ -354,6 +369,7 @@ export const daemonApi = {
 
 export const systemApi = {
   getEnvironmentStatus: () => invoke<EnvironmentStatus>("get_environment_status"),
+  getHostCapabilities: () => invoke<HostCapabilities>("get_host_capabilities"),
   installWsl2: () => invoke<string>("install_wsl2"),
   setUserPathIntegration: (enabled: boolean) =>
     invoke<EnvironmentStatus>("set_user_path_integration", { enabled }),

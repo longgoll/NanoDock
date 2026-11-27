@@ -296,9 +296,20 @@ export const vi: Translations = {
     autoStartLabel: "Tự động khởi chạy NanoDock daemon khi đăng nhập Windows",
     wslSection: "Tài nguyên VM & Mạng WSL2",
     wslSectionDesc: "Các thay đổi bên dưới cần khởi động lại WSL2 engine",
+    hostSummary: (ramGb: string, cores: number, os: string, wslVer: string | null) =>
+      `Máy của bạn: ${ramGb} RAM · ${cores} luồng CPU · ${os}${wslVer ? ` · WSL ${wslVer}` : ""}`,
+    applyRecommended: "Áp dụng đề xuất",
+    recommendedBadge: "Đề xuất",
+    recommendedApplied: "Đã áp dụng cấu hình đề xuất (nhớ bấm Lưu để áp dụng).",
     memoryLabel: "Giới hạn RAM WSL2",
     memoryHelp:
       "Mức trần RAM tối đa WSL2 được phép dùng. WSL2 chỉ cấp phát khi cần chứ không chiếm cố định toàn bộ ngay từ đầu.",
+    highMemoryWarning: (hostRamGb: string) =>
+      `Mức RAM này vượt quá 70% RAM vật lý (${hostRamGb}) — Windows có thể bị chậm khi container dùng nhiều RAM.`,
+    cpuLabel: "Giới hạn CPU WSL2",
+    cpuHelp: "Số luồng CPU tối đa cấp cho máy ảo WSL2. Để Tự động để WSL2 tự điều phối.",
+    cpuAuto: "Tự động (WSL2 mặc định)",
+    cpuCoresOption: (cores: number) => `${cores} luồng`,
     swapLabel: "Swap (Chống tràn RAM / Anti-OOM)",
     swapHelp:
       "Bộ nhớ đệm trên ổ đĩa giúp container không bị hệ thống kill đột ngột khi RAM tăng cao.",
@@ -308,6 +319,10 @@ export const vi: Translations = {
     mirroredNetLabel: "Bật chế độ mạng Mirrored cho WSL2",
     mirroredNetHelp:
       "Đồng bộ card mạng giữa Windows và WSL2 giúp truy cập localhost và VPN mượt hơn (yêu cầu Windows 11 22H2+).",
+    mirroredUnsupportedHint:
+      "Windows hoặc WSL hiện tại chưa hỗ trợ đầy đủ chế độ Mirrored (cần Windows 11 22H2+ & WSL 2.0+).",
+    mirroredVpnHint:
+      "Mẹo: Nếu dùng VPN công ty bị mất mạng trong container, hãy thử tắt tùy chọn này.",
     wslRestartNotice:
       "Cấu hình RAM, Swap, Sparse VHD hoặc Mạng WSL2 đã thay đổi — hãy khởi động lại engine sau khi lưu để áp dụng.",
     saving: "Đang lưu...",

@@ -1,9 +1,10 @@
-import { systemApi, type EnvironmentStatus } from "../api/daemon";
+import { systemApi, type EnvironmentStatus, type HostCapabilities } from "../api/daemon";
 import { i18n } from "../i18n/index.svelte";
 import { engineStore } from "./engine.svelte";
 
 class EnvironmentStore {
   status = $state<EnvironmentStatus | null>(null);
+  host = $state<HostCapabilities | null>(null);
   loading = $state(false);
   busyAction = $state<string | null>(null);
   error = $state<string | null>(null);
@@ -13,7 +14,12 @@ class EnvironmentStore {
     this.loading = true;
     this.error = null;
     try {
-      this.status = await systemApi.getEnvironmentStatus();
+      const [status, host] = await Promise.all([
+        systemApi.getEnvironmentStatus(),
+        systemApi.getHostCapabilities().catch(() => null),
+      ]);
+      this.status = status;
+      this.host = host;
     } catch (e) {
       this.error = String(e);
     } finally {

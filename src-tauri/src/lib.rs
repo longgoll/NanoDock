@@ -149,6 +149,7 @@ pub fn run() {
             commands::engine_extra::trigger_turbo_sync,
             commands::engine_extra::list_local_proxy_routes,
             commands::system::get_environment_status,
+            commands::system::get_host_capabilities,
             commands::system::install_wsl2,
             commands::system::set_user_path_integration,
             commands::system::set_docker_cli_shim,

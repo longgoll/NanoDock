@@ -9,6 +9,14 @@
   import { engineStore } from "../../lib/stores/engine.svelte";
   import { environmentStore } from "../../lib/stores/environment.svelte";
   import { updaterStore } from "../../lib/stores/updater.svelte";
+  import {
+    getCpuCoreOptions,
+    getMaxMemoryMb,
+    getMemoryPresets,
+    getProfileValues,
+    isMemoryHighForHost,
+    type ResourceProfileKind,
+  } from "../../lib/utils/wslRecommendation";
   import DiagnosticsModal from "./DiagnosticsModal.svelte";
 
   const DEFAULT_CONFIG: EngineConfig = {
@@ -59,33 +67,53 @@
     }
   }
 
-  function applyResourceProfile(profile: "eco" | "balanced" | "perf") {
-    if (profile === "eco") {
-      draft.wsl.memory_mb = 2048;
-      draft.wsl.swap_mb = 2048;
-      draft.idle_timeout_secs = 180;
-    } else if (profile === "balanced") {
-      draft.wsl.memory_mb = 4096;
-      draft.wsl.swap_mb = 4096;
-      draft.idle_timeout_secs = 300;
-    } else {
-      draft.wsl.memory_mb = 8192;
-      draft.wsl.swap_mb = 4096;
-      draft.idle_timeout_secs = 900;
-    }
+  const host = $derived(environmentStore.host);
+
+  function applyResourceProfile(profile: ResourceProfileKind) {
+    const values = getProfileValues(profile, host);
+    draft.wsl.memory_mb = values.memory_mb;
+    draft.wsl.swap_mb = values.swap_mb;
+    draft.idle_timeout_secs = values.idle_timeout_secs;
+  }
+
+  function applyRecommendedSettings() {
+    if (!host) return;
+    draft.wsl.memory_mb = host.recommended_memory_mb;
+    draft.wsl.swap_mb = host.recommended_swap_mb;
+    draft.wsl.processors = host.recommended_processors;
+    draft.wsl.mirrored_networking = host.recommended_mirrored_networking;
+    draft.wsl.sparse_vhd = host.recommended_sparse_vhd;
+    engineStore.setNotice(i18n.t.settings.recommendedApplied);
   }
 
   const activeProfile = $derived.by(() => {
-    if (draft.wsl.memory_mb === 2048 && draft.wsl.swap_mb === 2048 && draft.idle_timeout_secs === 180) {
-      return "eco";
-    }
-    if (draft.wsl.memory_mb === 4096 && draft.wsl.swap_mb === 4096 && draft.idle_timeout_secs === 300) {
-      return "balanced";
-    }
-    if (draft.wsl.memory_mb === 8192 && draft.wsl.swap_mb === 4096 && draft.idle_timeout_secs === 900) {
-      return "perf";
+    for (const kind of ["eco", "balanced", "perf"] as const) {
+      const p = getProfileValues(kind, host);
+      if (
+        draft.wsl.memory_mb === p.memory_mb &&
+        draft.wsl.swap_mb === p.swap_mb &&
+        draft.idle_timeout_secs === p.idle_timeout_secs
+      ) {
+        return kind;
+      }
     }
     return null;
+  });
+
+  const maxMemoryMb = $derived(getMaxMemoryMb(host));
+  const memoryPresets = $derived(getMemoryPresets(host));
+  const cpuCoreOptions = $derived(getCpuCoreOptions(host));
+  const isMemoryHigh = $derived(isMemoryHighForHost(draft.wsl.memory_mb, host));
+
+  const matchesRecommended = $derived.by(() => {
+    if (!host) return false;
+    return (
+      draft.wsl.memory_mb === host.recommended_memory_mb &&
+      draft.wsl.swap_mb === host.recommended_swap_mb &&
+      (draft.wsl.processors ?? null) === (host.recommended_processors ?? null) &&
+      draft.wsl.mirrored_networking === host.recommended_mirrored_networking &&
+      draft.wsl.sparse_vhd === host.recommended_sparse_vhd
+    );
   });
 
   const idleOptions = $derived<{ value: number | null; label: string }[]>([
@@ -96,8 +124,6 @@
     { value: 1800, label: i18n.t.settings.idle30m },
     { value: 3600, label: i18n.t.settings.idle60m },
   ]);
-
-  const memoryPresets = [2048, 4096, 8192, 12288, 16384];
 
   function cloneConfig(cfg: EngineConfig): EngineConfig {
     return {
@@ -648,13 +674,18 @@
             type="button"
             disabled={!isConnected}
             onclick={() => applyResourceProfile("balanced")}
-            class={`rounded-md border px-2 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
+            class={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
               activeProfile === "balanced"
                 ? "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/20 dark:text-sky-300"
                 : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             }`}
           >
             {i18n.t.extra.profileBalanced}
+            {#if host}
+              <span class="rounded bg-sky-500/15 px-1 py-px text-[9px] font-semibold text-sky-700 dark:text-sky-300">
+                {i18n.t.settings.recommendedBadge}
+              </span>
+            {/if}
           </button>
           <button
             type="button"
@@ -670,6 +701,27 @@
           </button>
         </div>
       </div>
+
+      {#if host && host.total_memory_mb > 0}
+        <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 text-xs dark:border-slate-800 dark:bg-slate-950/50">
+          <span class="text-slate-600 dark:text-slate-300">
+            {i18n.t.settings.hostSummary(
+              formatGb(host.total_memory_mb),
+              host.cpu_cores,
+              host.windows_label,
+              host.wsl_version,
+            )}
+          </span>
+          <button
+            type="button"
+            disabled={!isConnected || matchesRecommended}
+            onclick={applyRecommendedSettings}
+            class="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-white px-2.5 py-1 text-[11px] font-medium text-sky-700 transition hover:bg-sky-50 disabled:opacity-45 dark:border-sky-500/40 dark:bg-slate-900 dark:text-sky-300 dark:hover:bg-sky-500/10"
+          >
+            {i18n.t.settings.applyRecommended}
+          </button>
+        </div>
+      {/if}
 
       <div>
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -690,7 +742,7 @@
           id="ram-range"
           type="range"
           min="1024"
-          max="32768"
+          max={maxMemoryMb}
           step="512"
           bind:value={draft.wsl.memory_mb}
           disabled={!isConnected}
@@ -712,6 +764,38 @@
             </button>
           {/each}
         </div>
+        {#if isMemoryHigh && host}
+          <p class="mt-2 text-xs text-amber-600 dark:text-amber-400">
+            {i18n.t.settings.highMemoryWarning(formatGb(host.total_memory_mb))}
+          </p>
+        {/if}
+      </div>
+
+      <div>
+        <div class="flex items-center gap-1.5">
+          <label
+            for="cpu-cores"
+            class="text-sm font-medium text-slate-700 dark:text-slate-300"
+          >
+            {i18n.t.settings.cpuLabel}
+          </label>
+          <HelpTip align="left" text={i18n.t.settings.cpuHelp} />
+        </div>
+        <select
+          id="cpu-cores"
+          value={draft.wsl.processors ?? ""}
+          onchange={(e) => {
+            const val = e.currentTarget.value;
+            draft.wsl.processors = val === "" ? null : Number(val);
+          }}
+          disabled={!isConnected}
+          class="mt-2 w-full max-w-xs rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-sky-500 focus:outline-none disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+        >
+          <option value="">{i18n.t.settings.cpuAuto}</option>
+          {#each cpuCoreOptions as cores}
+            <option value={cores}>{i18n.t.settings.cpuCoresOption(cores)}</option>
+          {/each}
+        </select>
       </div>
 
       <div>
@@ -750,17 +834,28 @@
           <HelpTip text={i18n.t.settings.sparseVhdHelp} />
         </div>
 
-        <div class="flex items-center gap-2">
-          <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              bind:checked={draft.wsl.mirrored_networking}
-              disabled={!isConnected}
-              class="h-4 w-4 accent-sky-600 disabled:opacity-60"
-            />
-            {i18n.t.settings.mirroredNetLabel}
-          </label>
-          <HelpTip text={i18n.t.settings.mirroredNetHelp} />
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                bind:checked={draft.wsl.mirrored_networking}
+                disabled={!isConnected}
+                class="h-4 w-4 accent-sky-600 disabled:opacity-60"
+              />
+              {i18n.t.settings.mirroredNetLabel}
+            </label>
+            <HelpTip text={i18n.t.settings.mirroredNetHelp} />
+          </div>
+          {#if host && !host.supports_mirrored_networking}
+            <p class="pl-7 text-xs text-amber-600 dark:text-amber-400">
+              {i18n.t.settings.mirroredUnsupportedHint}
+            </p>
+          {:else}
+            <p class="pl-7 text-[11px] text-slate-400">
+              {i18n.t.settings.mirroredVpnHint}
+            </p>
+          {/if}
         </div>
       </div>
 
