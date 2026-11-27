@@ -5,6 +5,19 @@
     "max-size": "10m",
     "max-file": "3"
   },
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 1048576,
+      "Soft": 1048576
+    }
+  },
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "10GB"
+    }
+  },
   "live-restore": true,
   "hosts": [
     "unix:///var/run/docker.sock",

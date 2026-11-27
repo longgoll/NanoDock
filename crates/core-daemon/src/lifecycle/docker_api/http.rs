@@ -21,6 +21,13 @@ fn containers_cache() -> &'static Mutex<Option<CachedContainers>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
+/// Clears the short-lived `/containers/json` cache so the next query reflects Docker events immediately.
+pub(crate) fn invalidate_containers_cache() {
+    if let Ok(mut guard) = containers_cache().try_lock() {
+        *guard = None;
+    }
+}
+
 /// Fetches `/containers/json?all=1`, coalescing concurrent UI refresh calls within a 2s TTL.
 pub(super) async fn fetch_all_containers_raw<E: WslExecutor>(
     transport: &TransportManager<E>,

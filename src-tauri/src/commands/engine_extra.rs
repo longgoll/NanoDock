@@ -95,3 +95,51 @@ pub async fn set_keep_awake(enabled: bool) -> Result<ControlResponse, String> {
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn list_turbo_mounts() -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::ListTurboMounts)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn add_turbo_mount(
+    windows_path: String,
+    excludes: Option<Vec<String>>,
+) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::AddTurboMount {
+        windows_path,
+        excludes,
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn remove_turbo_mount(id: String) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::RemoveTurboMount { id })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn toggle_turbo_mount(id: String, enabled: bool) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::ToggleTurboMount { id, enabled })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn trigger_turbo_sync(id: Option<String>) -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::TriggerTurboSync { id })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_local_proxy_routes() -> Result<ControlResponse, String> {
+    send_control_request(ControlRequest::ListLocalProxyRoutes)
+        .await
+        .map_err(|e| e.to_string())
+}

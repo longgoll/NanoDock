@@ -47,10 +47,9 @@ pub async fn serve_docker_pipe<E: WslExecutor + 'static>(ctx: Arc<AppContext<E>>
                             }
                         };
 
-                        let transport = Arc::clone(&ctx.transport);
-                        let active = Arc::clone(&ctx.active_streams);
+                        let stream_ctx = Arc::clone(&ctx);
                         tokio::spawn(async move {
-                            if let Err(err) = handle_client_stream(connected, transport, active).await {
+                            if let Err(err) = handle_client_stream(connected, stream_ctx).await {
                                 warn!(error = %err, "Client proxy stream ended with error");
                             }
                         });

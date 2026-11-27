@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use tracing::{info, warn};
 
 use crate::error::WslError;
@@ -17,25 +15,22 @@ pub async fn wake_distro<E: WslExecutor>(exec: &E, distro_name: &str) -> Result<
     Ok(())
 }
 
-/// Gracefully stops `dockerd` and `containerd` inside the distro before terminating the VM,
-/// preventing `overlay2` metadata corruption.
+/// Gracefully stops `dockerd` and `containerd` inside the distro using fast PID/process polling
+/// and flushes filesystem buffers (`sync`) before terminating the VM, preventing `overlay2` corruption.
 pub async fn graceful_hibernate<E: WslExecutor>(
     exec: &E,
     distro_name: &str,
 ) -> Result<(), WslError> {
     info!(distro = distro_name, "Stopping dockerd/containerd before hibernate");
+    let shutdown_script = "\
+        pkill -TERM dockerd 2>/dev/null || true; \
+        i=0; while [ -f /var/run/docker.pid ] && kill -0 \"$(cat /var/run/docker.pid 2>/dev/null)\" 2>/dev/null && [ \"$i\" -lt 80 ]; do i=$((i+1)); sleep 0.05; done; \
+        pkill -TERM containerd 2>/dev/null || true; \
+        j=0; while pgrep -x containerd >/dev/null 2>&1 && [ \"$j\" -lt 60 ]; do j=$((j+1)); sleep 0.05; done; \
+        sync";
     let _ = exec
-        .run(&[
-            "-d",
-            distro_name,
-            "-e",
-            "sh",
-            "-c",
-            "pkill -TERM dockerd || true; sleep 1; pkill -TERM containerd || true",
-        ])
+        .run(&["-d", distro_name, "-e", "sh", "-c", shutdown_script])
         .await;
-
-    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let term = exec.run(&["--terminate", distro_name]).await?;
     if !term.success {

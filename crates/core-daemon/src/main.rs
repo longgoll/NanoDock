@@ -1,12 +1,15 @@
 mod app_context;
 mod config_store;
 mod control_rpc;
+mod diagnostics;
 mod lifecycle;
+mod local_proxy;
 mod log_store;
 mod pipe_server;
 mod proxy;
 mod startup;
 mod transport;
+mod turbo_sync;
 mod watchers;
 
 use std::path::PathBuf;
@@ -21,6 +24,7 @@ use crate::watchers::{DiskReclaimHook, DockerEventHook, UiEventHook};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    diagnostics::install_panic_hook();
     let log_writer = log_store::TeeLogWriter::open(&log_store::default_log_path());
     tracing_subscriber::fmt()
         .with_writer(log_writer)
@@ -50,10 +54,19 @@ async fn main() -> anyhow::Result<()> {
     let control_task = tokio::spawn(control_rpc::serve_control_pipe(Arc::clone(&ctx)));
     let hibernate_task = tokio::spawn(lifecycle::run_hibernate_watcher(Arc::clone(&ctx)));
     let events_task = tokio::spawn(watchers::run_event_watchers(Arc::clone(&ctx), hooks));
+    let turbo_task = tokio::spawn(turbo_sync::run_turbo_sync_watcher(Arc::clone(&ctx)));
+    let proxy_task = tokio::spawn(local_proxy::run_local_proxy_server(Arc::clone(&ctx)));
 
-    tokio::signal::ctrl_c().await?;
-    info!("Shutdown signal received");
-    ctx.shutdown.cancel();
+    tokio::select! {
+        res = tokio::signal::ctrl_c() => {
+            res?;
+            info!("Shutdown signal received");
+            ctx.shutdown.cancel();
+        }
+        _ = ctx.shutdown.cancelled() => {
+            info!("Shutdown requested via Control RPC");
+        }
+    }
 
     for handle in [docker_task, control_task] {
         if let Err(err) = handle.await {
@@ -62,6 +75,8 @@ async fn main() -> anyhow::Result<()> {
     }
     let _ = hibernate_task.await;
     let _ = events_task.await;
+    let _ = turbo_task.await;
+    let _ = proxy_task.await;
 
     Ok(())
 }

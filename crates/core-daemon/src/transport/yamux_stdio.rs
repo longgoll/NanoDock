@@ -1,25 +1,15 @@
 use std::pin::Pin;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::Context as _;
 use async_trait::async_trait;
-use futures::future::poll_fn;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, BufReader, ReadBuf};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
-use tokio::sync::{mpsc, oneshot};
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tracing::{debug, error};
-use yamux::{Config, Connection, Mode};
+use tracing::warn;
 
 use crate::transport::traits::{BoxedStream, StreamTransport};
-
-enum ControlMsg {
-    OpenStream(oneshot::Sender<anyhow::Result<yamux::Stream>>),
-    Close,
-}
+use crate::transport::yamux_client::YamuxClient;
 
 struct ChildStdioStream {
     stdin: ChildStdin,
@@ -56,8 +46,7 @@ impl AsyncWrite for ChildStdioStream {
 
 /// Persistent `yamux` client over a single `wsl.exe -d <distro> -e /usr/local/bin/nanodock-agent` process.
 pub struct YamuxStdioTransport {
-    cmd_tx: mpsc::Sender<ControlMsg>,
-    alive: Arc<AtomicBool>,
+    client: YamuxClient,
 }
 
 impl YamuxStdioTransport {
@@ -66,7 +55,7 @@ impl YamuxStdioTransport {
         cmd.args(["-d", distro_name, "-e", "/usr/local/bin/nanodock-agent"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .kill_on_drop(true);
         #[cfg(windows)]
         {
@@ -79,77 +68,38 @@ impl YamuxStdioTransport {
 
         let stdin = child.stdin.take().context("missing child stdin")?;
         let stdout = child.stdout.take().context("missing child stdout")?;
-        let stdio = ChildStdioStream { stdin, stdout };
-
-        let (cmd_tx, mut cmd_rx) = mpsc::channel::<ControlMsg>(64);
-        let alive = Arc::new(AtomicBool::new(true));
-        let alive_flag = Arc::clone(&alive);
-
-        tokio::spawn(async move {
-            let mut conn = Connection::new(stdio.compat(), build_yamux_config(), Mode::Client);
-            loop {
-                tokio::select! {
-                    msg = cmd_rx.recv() => {
-                        match msg {
-                            Some(ControlMsg::OpenStream(reply)) => {
-                                let res = poll_fn(|cx| conn.poll_new_outbound(cx))
-                                    .await
-                                    .map_err(|e| anyhow::anyhow!("yamux open stream: {e}"));
-                                let _ = reply.send(res);
-                            }
-                            Some(ControlMsg::Close) | None => {
-                                let _ = poll_fn(|cx| conn.poll_close(cx)).await;
-                                break;
-                            }
-                        }
-                    }
-                    inbound = poll_fn(|cx| conn.poll_next_inbound(cx)) => {
-                        match inbound {
-                            Some(Ok(_)) => debug!("ignoring unexpected inbound yamux stream"),
-                            Some(Err(e)) => {
-                                error!("yamux connection error: {e}");
-                                break;
-                            }
-                            None => break,
-                        }
+        if let Some(stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        warn!(target: "guest_agent", "{trimmed}");
                     }
                 }
-            }
-            alive_flag.store(false, Ordering::SeqCst);
-            let _ = child.kill().await;
+            });
+        }
+
+        let stdio = ChildStdioStream { stdin, stdout };
+        let client = YamuxClient::spawn(stdio, move || {
+            let _ = child.start_kill();
         });
 
-        Ok(Self { cmd_tx, alive })
+        Ok(Self { client })
     }
-}
-
-fn build_yamux_config() -> Config {
-    let mut cfg = Config::default();
-    cfg.set_max_num_streams(1024);
-    // Must be >= 256 KiB * max_num_streams (256 MiB for 1024 streams) per yamux 0.13 invariant.
-    cfg.set_max_connection_receive_window(Some(256 * 1024 * 1024));
-    cfg
 }
 
 #[async_trait]
 impl StreamTransport for YamuxStdioTransport {
     async fn open_stream(&self) -> anyhow::Result<BoxedStream> {
-        let (tx, rx) = oneshot::channel();
-        self.cmd_tx
-            .send(ControlMsg::OpenStream(tx))
-            .await
-            .map_err(|_| anyhow::anyhow!("yamux transport driver stopped"))?;
-        let stream = rx.await.context("yamux open stream cancelled")??;
-        Ok(Box::new(stream.compat()))
+        self.client.open_stream().await
     }
 
     fn is_alive(&self) -> bool {
-        self.alive.load(Ordering::SeqCst)
+        self.client.is_alive()
     }
 
     async fn close(&self) -> anyhow::Result<()> {
-        let _ = self.cmd_tx.send(ControlMsg::Close).await;
-        self.alive.store(false, Ordering::SeqCst);
-        Ok(())
+        self.client.close().await
     }
 }

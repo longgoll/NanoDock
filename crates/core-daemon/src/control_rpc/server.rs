@@ -75,7 +75,7 @@ async fn serve_control_pipe_at<E: WslExecutor + 'static>(
     Ok(())
 }
 
-async fn handle_control_client<E: WslExecutor>(
+async fn handle_control_client<E: WslExecutor + 'static>(
     pipe: NamedPipeServer,
     ctx: Arc<AppContext<E>>,
 ) -> anyhow::Result<()> {
@@ -197,7 +197,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(state, EngineState::Stopped);
-                assert_eq!(running_containers, 2);
+                assert_eq!(running_containers, 0);
             }
             other => panic!("unexpected response: {other:?}"),
         }

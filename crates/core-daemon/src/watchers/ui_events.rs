@@ -38,6 +38,10 @@ impl<E: WslExecutor + 'static> DockerEventHook for UiEventHook<E> {
         );
 
         if relevant {
+            if event.kind == "container" {
+                crate::lifecycle::docker_api::invalidate_containers_cache();
+                self.ctx.local_proxy_notify.notify_one();
+            }
             let _ = self.ctx.events.send(DaemonEvent::DockerChanged {
                 resource: event.kind.clone(),
                 action: event.action.clone(),

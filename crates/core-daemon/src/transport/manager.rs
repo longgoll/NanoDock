@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use shared_types::{DaemonEvent, EngineState};
 use tokio::sync::{broadcast, Mutex, RwLock};
-use tracing::info;
-use wsl_bridge::{wake_distro, WslExecutor};
+use tracing::{info, warn};
+use wsl_bridge::{graceful_hibernate, wake_distro, WslExecutor};
 
+use crate::transport::hyperv::{try_connect_hyperv_transport, DEFAULT_VSOCK_PORT};
 use crate::transport::traits::{BoxedStream, StreamTransport};
 use crate::transport::yamux_stdio::YamuxStdioTransport;
 
@@ -45,17 +47,63 @@ impl<E: WslExecutor> TransportManager<E> {
     }
 
     /// Returns an open multiplexed stream to `/var/run/docker.sock`, waking the distro if needed.
+    /// Automatically recovers with brief backoff if the underlying `guest-agent` or WSL2 session restarted.
     pub async fn open_docker_stream(&self) -> anyhow::Result<BoxedStream> {
-        let transport = self.ensure_connected().await?;
-        match transport.open_stream().await {
-            Ok(stream) => Ok(stream),
-            Err(_) => {
-                // Reconnect once if the distro was externally terminated.
-                self.close_transport().await;
-                let fresh = self.ensure_connected().await?;
-                fresh.open_stream().await
+        let mut last_err = None;
+        for attempt in 0..3 {
+            if attempt > 0 {
+                tokio::time::sleep(Duration::from_millis(100 * attempt as u64)).await;
+            }
+            let transport = match self.ensure_connected().await {
+                Ok(t) => t,
+                Err(err) => {
+                    warn!(attempt, error = %err, "Transport connect failed; retrying");
+                    last_err = Some(err);
+                    self.close_transport().await;
+                    continue;
+                }
+            };
+            match transport.open_stream().await {
+                Ok(stream) => return Ok(stream),
+                Err(err) => {
+                    warn!(attempt, error = %err, "Stream open failed; reconnecting transport");
+                    last_err = Some(err);
+                    self.close_transport().await;
+                }
             }
         }
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("failed to open docker stream")))
+    }
+
+    /// Explicitly wakes the WSL2 distro under the transport lock so `StartEngine`
+    /// cannot race with `hibernate()` on `EngineState` transitions.
+    pub async fn start_engine(&self) -> anyhow::Result<()> {
+        let _guard = self.active.lock().await;
+        self.set_state(EngineState::Starting).await;
+        info!(distro = %self.distro_name, "Starting WSL2 micro-distro");
+        if let Err(err) = wake_distro(self.wsl.as_ref(), &self.distro_name).await {
+            self.set_state(EngineState::Error).await;
+            return Err(err.into());
+        }
+        self.set_state(EngineState::Running).await;
+        Ok(())
+    }
+
+    /// Atomically closes the active transport and gracefully hibernates the WSL2 distro
+    /// while holding the transport lock so concurrent auto-wake requests wait cleanly
+    /// and cannot interleave with `EngineState` updates.
+    pub async fn hibernate(&self, distro_name: &str) -> Result<(), wsl_bridge::WslError> {
+        let mut guard = self.active.lock().await;
+        self.set_state(EngineState::Stopping).await;
+        if let Some(t) = guard.take() {
+            let _ = t.close().await;
+        }
+        let res = graceful_hibernate(self.wsl.as_ref(), distro_name).await;
+        match &res {
+            Ok(()) => self.set_state(EngineState::Stopped).await,
+            Err(_) => self.set_state(EngineState::Error).await,
+        }
+        res
     }
 
     pub async fn ensure_connected(&self) -> anyhow::Result<Arc<dyn StreamTransport>> {
@@ -70,20 +118,24 @@ impl<E: WslExecutor> TransportManager<E> {
         wake_distro(self.wsl.as_ref(), &self.distro_name).await?;
 
         let transport: Arc<dyn StreamTransport> =
-            Arc::new(YamuxStdioTransport::spawn(&self.distro_name)?);
+            if let Some(hv) = try_connect_hyperv_transport(DEFAULT_VSOCK_PORT).await {
+                hv
+            } else {
+                Arc::new(YamuxStdioTransport::spawn(&self.distro_name)?)
+            };
         *guard = Some(Arc::clone(&transport));
-        self.mark_running().await;
+        self.set_state(EngineState::Running).await;
 
         Ok(transport)
     }
 
-    async fn mark_running(&self) {
+    async fn set_state(&self, next: EngineState) {
         if let Some(state_lock) = &self.state {
             let mut st = state_lock.write().await;
-            if *st != EngineState::Running {
-                *st = EngineState::Running;
+            if *st != next {
+                *st = next;
                 if let Some(tx) = &self.events {
-                    let _ = tx.send(DaemonEvent::StateChanged(EngineState::Running));
+                    let _ = tx.send(DaemonEvent::StateChanged(next));
                 }
             }
         }
@@ -129,14 +181,25 @@ mod tests {
             tx,
         );
 
-        mgr.mark_running().await;
+        mgr.set_state(EngineState::Running).await;
         assert_eq!(*state.read().await, EngineState::Running);
         assert_eq!(
             rx.try_recv().unwrap(),
             DaemonEvent::StateChanged(EngineState::Running)
         );
 
-        mgr.mark_running().await;
+        mgr.set_state(EngineState::Running).await;
         assert!(rx.try_recv().is_err());
+
+        mgr.hibernate("nanodock").await.unwrap();
+        assert_eq!(*state.read().await, EngineState::Stopped);
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            DaemonEvent::StateChanged(EngineState::Stopping)
+        );
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            DaemonEvent::StateChanged(EngineState::Stopped)
+        );
     }
 }

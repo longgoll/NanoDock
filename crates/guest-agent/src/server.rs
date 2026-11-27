@@ -1,22 +1,67 @@
 #[cfg(unix)]
+use std::sync::OnceLock;
+
+#[cfg(unix)]
 use anyhow::Context;
 #[cfg(unix)]
 use futures::future::poll_fn;
 #[cfg(unix)]
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+#[cfg(unix)]
 use tokio::net::UnixStream;
+#[cfg(unix)]
+use tokio::process::Command;
+#[cfg(unix)]
+use tokio::sync::Mutex;
 #[cfg(unix)]
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 #[cfg(unix)]
 use yamux::{Config, Connection, Mode};
 
 #[cfg(unix)]
-use crate::stdio::StdioStream;
+use crate::control::handle_control_stream;
 
-/// Runs a `yamux` server over `StdioStream`, forwarding each multiplexed stream
-/// to the Docker Unix socket at `socket_path`.
 #[cfg(unix)]
-pub async fn run_yamux_server(stdio: StdioStream, socket_path: &str) -> anyhow::Result<()> {
-    let mut conn = Connection::new(stdio.compat(), build_yamux_config(), Mode::Server);
+const NDK_MAGIC: &[u8; 4] = b"\x00NDK";
+
+#[cfg(unix)]
+fn init_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+#[cfg(unix)]
+async fn connect_docker_socket(socket_path: &str) -> anyhow::Result<UnixStream> {
+    if let Ok(stream) = UnixStream::connect(socket_path).await {
+        return Ok(stream);
+    }
+
+    // Serialize /init.sh recovery across concurrent streams if dockerd crashed.
+    let _guard = init_lock().lock().await;
+    if let Ok(stream) = UnixStream::connect(socket_path).await {
+        return Ok(stream);
+    }
+
+    if std::path::Path::new("/init.sh").exists() {
+        let status = Command::new("/init.sh").status().await;
+        if let Err(err) = status {
+            eprintln!("nanodock-agent /init.sh recovery failed: {err}");
+        }
+    }
+
+    UnixStream::connect(socket_path)
+        .await
+        .with_context(|| format!("failed to connect to {socket_path}"))
+}
+
+/// Runs a `yamux` server over any bidirectional stream (stdio or AF_VSOCK),
+/// routing `\x00NDK` control streams to `control.rs` and all other streams to `socket_path`.
+#[cfg(unix)]
+pub async fn run_yamux_server<IO>(io: IO, socket_path: &str) -> anyhow::Result<()>
+where
+    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let mut conn = Connection::new(io.compat(), build_yamux_config(), Mode::Server);
 
     while let Some(stream) = poll_fn(|cx| conn.poll_next_inbound(cx))
         .await
@@ -36,11 +81,27 @@ pub async fn run_yamux_server(stdio: StdioStream, socket_path: &str) -> anyhow::
 
 #[cfg(unix)]
 async fn forward_stream(stream: yamux::Stream, socket_path: &str) -> anyhow::Result<()> {
-    let mut unix = UnixStream::connect(socket_path)
-        .await
-        .with_context(|| format!("failed to connect to {socket_path}"))?;
     let mut compat_stream = stream.compat();
+    let mut prefix = [0u8; 4];
+    let mut filled = 0usize;
 
+    while filled < 4 {
+        let n = compat_stream.read(&mut prefix[filled..]).await?;
+        if n == 0 {
+            break;
+        }
+        filled += n;
+    }
+    if filled == 0 {
+        return Ok(());
+    }
+
+    if filled == 4 && &prefix == NDK_MAGIC {
+        return handle_control_stream(compat_stream).await;
+    }
+
+    let mut unix = connect_docker_socket(socket_path).await?;
+    unix.write_all(&prefix[..filled]).await?;
     tokio::io::copy_bidirectional(&mut compat_stream, &mut unix).await?;
     Ok(())
 }

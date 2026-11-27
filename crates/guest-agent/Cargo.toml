@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 futures = "0.3"
+libc = "0.2"
 tokio.workspace = true
 tokio-util = { version = "0.7", features = ["compat"] }
 tracing.workspace = true

@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use shared_types::EngineState;
 use tracing::{debug, info, warn};
-use wsl_bridge::{graceful_hibernate, WslExecutor};
+use wsl_bridge::WslExecutor;
 
 use crate::app_context::AppContext;
 use crate::lifecycle::docker_api::count_running_containers;
@@ -65,14 +65,10 @@ pub async fn run_hibernate_watcher<E: WslExecutor + 'static>(ctx: Arc<AppContext
                         if elapsed >= Duration::from_secs(timeout_secs) {
                             info!(distro = %distro_name, "Idle timeout reached; hibernating WSL2 distro");
                             ctx.idle_remaining_secs.store(u64::MAX, Ordering::Relaxed);
-                            ctx.set_state(EngineState::Stopping).await;
-                            ctx.transport.close_transport().await;
-                            if let Err(err) = graceful_hibernate(ctx.wsl.as_ref(), &distro_name).await {
+                            if let Err(err) = ctx.transport.hibernate(&distro_name).await {
                                 warn!(error = %err, "Graceful hibernate failed");
-                                ctx.set_state(EngineState::Error).await;
                             } else {
                                 ctx.hibernate_count.fetch_add(1, Ordering::Relaxed);
-                                ctx.set_state(EngineState::Stopped).await;
                             }
                             idle_since = None;
                         }

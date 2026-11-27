@@ -5,13 +5,28 @@ use std::sync::{Arc, Mutex};
 
 const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
 
+pub fn default_log_dir() -> PathBuf {
+    #[cfg(windows)]
+    {
+        std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("NanoDock")
+            .join("logs")
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("nanodock")
+            .join("logs")
+    }
+}
+
 pub fn default_log_path() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("NanoDock")
-        .join("logs")
-        .join("core-daemon.log")
+    default_log_dir().join("core-daemon.log")
 }
 
 #[derive(Clone)]

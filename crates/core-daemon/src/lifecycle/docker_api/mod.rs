@@ -11,7 +11,8 @@ pub use containers::{
     count_running_containers, get_container_logs, list_containers, perform_container_action,
 };
 pub(crate) use http::{
-    decode_chunked_body, decode_docker_logs, percent_encode_query, sanitize_path_segment,
+    decode_chunked_body, decode_docker_logs, invalidate_containers_cache, percent_encode_query,
+    sanitize_path_segment,
 };
 pub(super) use http::{docker_http_json_request, docker_http_request};
 pub use images::{

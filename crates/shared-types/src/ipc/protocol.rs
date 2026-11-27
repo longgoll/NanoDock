@@ -4,8 +4,8 @@ use crate::{config::EngineConfig, events::EngineState};
 
 use super::models::{
     BuildCacheSummary, ContainerActionKind, ContainerFileEntry, ContainerInspect, ContainerStats,
-    ContainerSummary, EngineMetrics, ImageLayer, ImageSummary, NetworkSummary, RunContainerSpec,
-    VolumeSummary, WslDistroInfo,
+    ContainerSummary, EngineMetrics, ImageLayer, ImageSummary, LocalProxyRoute, NetworkSummary,
+    RunContainerSpec, TurboMountStatus, VolumeSummary, WslDistroInfo,
 };
 
 /// Requests sent from the Tauri UI or CLI to `core-daemon` over `\\.\pipe\nanodock_ctl`.
@@ -116,6 +116,25 @@ pub enum ControlRequest {
         id: String,
     },
     PruneNetworks,
+    ListTurboMounts,
+    AddTurboMount {
+        windows_path: String,
+        excludes: Option<Vec<String>>,
+    },
+    RemoveTurboMount {
+        id: String,
+    },
+    ToggleTurboMount {
+        id: String,
+        enabled: bool,
+    },
+    TriggerTurboSync {
+        id: Option<String>,
+    },
+    ListLocalProxyRoutes,
+    GetDiagnosticReport {
+        lines: Option<usize>,
+    },
 }
 
 /// Responses returned by `core-daemon` over the control pipe.
@@ -159,6 +178,12 @@ pub enum ControlResponse {
     ImageLayers(Vec<ImageLayer>),
     Volumes(Vec<VolumeSummary>),
     Networks(Vec<NetworkSummary>),
+    TurboMounts(Vec<TurboMountStatus>),
+    LocalProxyRoutes(Vec<LocalProxyRoute>),
+    DiagnosticReport {
+        markdown: String,
+        has_crash_report: bool,
+    },
     PruneResult {
         reclaimed_bytes: u64,
     },

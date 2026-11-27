@@ -3,13 +3,14 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use shared_types::{DaemonEvent, EngineConfig, EngineMetrics, EngineState};
-use tokio::sync::{broadcast, RwLock};
+use shared_types::{DaemonEvent, EngineConfig, EngineMetrics, EngineState, LocalProxyRoute};
+use tokio::sync::{broadcast, Notify, RwLock};
 use tokio_util::sync::CancellationToken;
 use wsl_bridge::WslExecutor;
 
 use crate::startup::{NoopStartup, StartupManager};
 use crate::transport::TransportManager;
+use crate::turbo_sync::{MuxWslSyncTarget, TurboSyncEngine};
 
 /// Shared runtime state and coordination primitives for `core-daemon`.
 pub struct AppContext<E: WslExecutor> {
@@ -20,6 +21,9 @@ pub struct AppContext<E: WslExecutor> {
     pub wsl: Arc<E>,
     pub startup: Arc<dyn StartupManager>,
     pub transport: Arc<TransportManager<E>>,
+    pub turbo_sync: Arc<TurboSyncEngine>,
+    pub local_proxy_routes: Arc<RwLock<Vec<LocalProxyRoute>>>,
+    pub local_proxy_notify: Arc<Notify>,
     pub active_streams: Arc<AtomicUsize>,
     pub hibernate_count: Arc<AtomicU64>,
     pub total_reclaimed_bytes: Arc<AtomicU64>,
@@ -30,7 +34,7 @@ pub struct AppContext<E: WslExecutor> {
     pub events: broadcast::Sender<DaemonEvent>,
 }
 
-impl<E: WslExecutor> AppContext<E> {
+impl<E: WslExecutor + 'static> AppContext<E> {
     #[allow(dead_code)]
     pub fn new(config: EngineConfig, wsl: Arc<E>) -> Arc<Self> {
         let test_cfg =
@@ -53,6 +57,10 @@ impl<E: WslExecutor> AppContext<E> {
             Arc::clone(&state),
             events.clone(),
         ));
+        let turbo_sync = Arc::new(TurboSyncEngine::with_target(
+            Arc::new(MuxWslSyncTarget::new(Arc::clone(&transport))),
+            events.clone(),
+        ));
         Arc::new(Self {
             config: RwLock::new(config),
             config_path,
@@ -61,6 +69,9 @@ impl<E: WslExecutor> AppContext<E> {
             wsl,
             startup,
             transport,
+            turbo_sync,
+            local_proxy_routes: Arc::new(RwLock::new(Vec::new())),
+            local_proxy_notify: Arc::new(Notify::new()),
             active_streams: Arc::new(AtomicUsize::new(0)),
             hibernate_count: Arc::new(AtomicU64::new(0)),
             total_reclaimed_bytes: Arc::new(AtomicU64::new(0)),
@@ -88,6 +99,7 @@ impl<E: WslExecutor> AppContext<E> {
         }
     }
 
+    #[cfg(test)]
     pub async fn set_state(&self, next: EngineState) {
         let mut guard = self.state.write().await;
         if *guard != next {

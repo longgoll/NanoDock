@@ -193,3 +193,67 @@ fn find_sibling_exe(name: &str) -> Option<PathBuf> {
     let candidate = exe.parent()?.join(name);
     candidate.exists().then_some(candidate)
 }
+
+pub async fn cmd_turbo(args: &[String]) -> anyhow::Result<u8> {
+    let sub = args.first().map(String::as_str).unwrap_or("list");
+    let req = match sub {
+        "list" | "ls" => ControlRequest::ListTurboMounts,
+        "add" => {
+            let Some(path) = args.get(1) else {
+                anyhow::bail!("usage: nanodock turbo add <windows_path>");
+            };
+            ControlRequest::AddTurboMount {
+                windows_path: path.clone(),
+                excludes: None,
+            }
+        }
+        "remove" | "rm" => {
+            let Some(id) = args.get(1) else {
+                anyhow::bail!("usage: nanodock turbo remove <id>");
+            };
+            ControlRequest::RemoveTurboMount { id: id.clone() }
+        }
+        "sync" => ControlRequest::TriggerTurboSync {
+            id: args.get(1).cloned(),
+        },
+        other => anyhow::bail!("unknown turbo subcommand '{other}' (expected list|add|remove|sync)"),
+    };
+
+    match send_control_request(req).await? {
+        ControlResponse::TurboMounts(items) => {
+            if items.is_empty() {
+                println!("No Turbo Mounts configured.");
+            } else {
+                for item in items {
+                    println!(
+                        "{}  [{:?}]  {} -> {}  ({} files)",
+                        item.id, item.state, item.windows_path, item.wsl_path, item.files_synced
+                    );
+                }
+            }
+            Ok(0)
+        }
+        ControlResponse::Error { message } => anyhow::bail!(message),
+        other => anyhow::bail!("unexpected response from core-daemon: {other:?}"),
+    }
+}
+
+pub async fn cmd_routes() -> anyhow::Result<u8> {
+    match send_control_request(ControlRequest::ListLocalProxyRoutes).await? {
+        ControlResponse::LocalProxyRoutes(routes) => {
+            if routes.is_empty() {
+                println!("No active *.localhost routes.");
+            } else {
+                for r in routes {
+                    println!(
+                        "http://{} -> 127.0.0.1:{} ({})",
+                        r.host, r.target_port, r.container_name
+                    );
+                }
+            }
+            Ok(0)
+        }
+        ControlResponse::Error { message } => anyhow::bail!(message),
+        other => anyhow::bail!("unexpected response from core-daemon: {other:?}"),
+    }
+}

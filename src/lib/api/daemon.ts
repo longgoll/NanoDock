@@ -20,6 +20,37 @@ export interface WslConfigSpec {
   swap_mb: number;
   sparse_vhd: boolean;
   mirrored_networking: boolean;
+  processors?: number | null;
+  page_reporting?: boolean;
+}
+
+export interface TurboMountRule {
+  id: string;
+  windows_path: string;
+  wsl_path: string;
+  excludes: string[];
+  enabled: boolean;
+}
+
+export type TurboMountSyncState = "idle" | "syncing" | "synced" | "error";
+
+export interface TurboMountStatus {
+  id: string;
+  windows_path: string;
+  wsl_path: string;
+  excludes: string[];
+  enabled: boolean;
+  state: TurboMountSyncState;
+  files_synced: number;
+  last_sync_epoch_ms: number | null;
+  last_error: string | null;
+}
+
+export interface LocalProxyRoute {
+  host: string;
+  container_name: string;
+  target_port: number;
+  compose_project: string | null;
 }
 
 export interface EngineConfig {
@@ -28,6 +59,9 @@ export interface EngineConfig {
   auto_start_on_login: boolean;
   auto_trim_on_events: boolean;
   wsl: WslConfigSpec;
+  turbo_mounts?: TurboMountRule[];
+  local_proxy_enabled?: boolean;
+  local_proxy_port?: number;
 }
 
 export interface ContainerSummary {
@@ -205,6 +239,8 @@ export type ControlResponse =
   | { status: "image_layers"; data: ImageLayer[] }
   | { status: "volumes"; data: VolumeSummary[] }
   | { status: "networks"; data: NetworkSummary[] }
+  | { status: "turbo_mounts"; data: TurboMountStatus[] }
+  | { status: "local_proxy_routes"; data: LocalProxyRoute[] }
   | { status: "prune_result"; data: { reclaimed_bytes: number } }
   | { status: "ack" }
   | { status: "error"; data: { message: string } };
@@ -254,6 +290,15 @@ export const daemonApi = {
   getEngineLogs: (lines = 150) => invoke<ControlResponse>("get_engine_logs", { lines }),
   getEngineMetrics: () => invoke<ControlResponse>("get_engine_metrics"),
   setKeepAwake: (enabled: boolean) => invoke<ControlResponse>("set_keep_awake", { enabled }),
+  listTurboMounts: () => invoke<ControlResponse>("list_turbo_mounts"),
+  addTurboMount: (windowsPath: string, excludes?: string[]) =>
+    invoke<ControlResponse>("add_turbo_mount", { windowsPath, excludes: excludes ?? null }),
+  removeTurboMount: (id: string) => invoke<ControlResponse>("remove_turbo_mount", { id }),
+  toggleTurboMount: (id: string, enabled: boolean) =>
+    invoke<ControlResponse>("toggle_turbo_mount", { id, enabled }),
+  triggerTurboSync: (id?: string) =>
+    invoke<ControlResponse>("trigger_turbo_sync", { id: id ?? null }),
+  listLocalProxyRoutes: () => invoke<ControlResponse>("list_local_proxy_routes"),
   getBuildCache: () => invoke<ControlResponse>("get_build_cache"),
   pruneBuildCache: () => invoke<ControlResponse>("prune_build_cache"),
   listWslDistros: () => invoke<ControlResponse>("list_wsl_distros"),

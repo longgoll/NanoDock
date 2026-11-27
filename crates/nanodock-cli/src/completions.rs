@@ -20,7 +20,7 @@ pub fn generate_completion_script(shell: &str) -> anyhow::Result<&'static str> {
 const POWERSHELL_COMPLETION: &str = r#"# NanoDock PowerShell completion
 Register-ArgumentCompleter -Native -CommandName nanodock -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
-    $commands = @('start', 'stop', 'status', 'trim', 'config', 'logs', 'doctor', 'completions', 'version', 'help', 'ps', 'run', 'images', 'compose', 'build', 'exec', 'logs', 'volume', 'network')
+    $commands = @('start', 'stop', 'status', 'trim', 'config', 'logs', 'doctor', 'turbo', 'routes', 'completions', 'version', 'help', 'ps', 'run', 'images', 'compose', 'build', 'exec', 'logs', 'volume', 'network')
     $commands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
         [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
     }
@@ -30,7 +30,7 @@ Register-ArgumentCompleter -Native -CommandName nanodock -ScriptBlock {
 const BASH_COMPLETION: &str = r#"# NanoDock bash completion
 _nanodock_completions() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
-    local cmds="start stop status trim config logs doctor completions version help ps run images compose build exec volume network"
+    local cmds="start stop status trim config logs doctor turbo routes completions version help ps run images compose build exec volume network"
     COMPREPLY=( $(compgen -W "${cmds}" -- "${cur}") )
 }
 complete -F _nanodock_completions nanodock
@@ -47,6 +47,8 @@ _nanodock() {
         'config:Print active engine configuration'
         'logs:Show core-daemon and dockerd logs'
         'doctor:Run NanoDock environment diagnostics'
+        'turbo:Manage Turbo Mounts (Windows -> WSL2 ext4 sync)'
+        'routes:Show active *.localhost reverse proxy routes'
         'completions:Generate shell completion scripts'
         'version:Print NanoDock CLI version'
         'help:Show help message'

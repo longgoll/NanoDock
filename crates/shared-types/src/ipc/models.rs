@@ -160,3 +160,36 @@ pub struct BuildCacheSummary {
     pub reclaimable_bytes: u64,
     pub record_count: usize,
 }
+
+/// Sync state for a Turbo Mount rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TurboMountSyncState {
+    Idle,
+    Syncing,
+    Synced,
+    Error,
+}
+
+/// Live status of a configured Turbo Mount rule.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TurboMountStatus {
+    pub id: String,
+    pub windows_path: String,
+    pub wsl_path: String,
+    pub excludes: Vec<String>,
+    pub enabled: bool,
+    pub state: TurboMountSyncState,
+    pub files_synced: u64,
+    pub last_sync_epoch_ms: Option<u64>,
+    pub last_error: Option<String>,
+}
+
+/// Active `*.localhost` reverse proxy route exposed by `core-daemon`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalProxyRoute {
+    pub host: String,
+    pub container_name: String,
+    pub target_port: u16,
+    pub compose_project: Option<String>,
+}

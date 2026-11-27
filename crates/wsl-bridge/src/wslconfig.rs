@@ -47,6 +47,14 @@ pub fn merge_wslconfig_content(
     let wsl2_entries = sections.entry("wsl2".to_string()).or_default();
     upsert_key(wsl2_entries, "memory", &format!("{}MB", spec.memory_mb));
     upsert_key(wsl2_entries, "swap", &format!("{}MB", spec.swap_mb));
+    if let Some(procs) = spec.processors.filter(|&p| p > 0) {
+        upsert_key(wsl2_entries, "processors", &procs.to_string());
+    }
+    upsert_key(
+        wsl2_entries,
+        "pageReporting",
+        if spec.page_reporting { "true" } else { "false" },
+    );
     upsert_key(
         wsl2_entries,
         "sparseVhd",
@@ -58,6 +66,7 @@ pub fn merge_wslconfig_content(
         if spec.mirrored_networking {
             upsert_key(wsl2_entries, "networkingMode", "mirrored");
             upsert_key(wsl2_entries, "dnsTunneling", "true");
+            upsert_key(wsl2_entries, "bestEffortDnsParsing", "true");
         } else {
             upsert_key(wsl2_entries, "networkingMode", "nat");
         }
@@ -137,9 +146,12 @@ mod tests {
             swap_mb: 4096,
             sparse_vhd: true,
             mirrored_networking: true,
+            ..WslConfigSpec::default()
         };
         let merged = merge_wslconfig_content(existing, &spec, true);
         assert!(merged.contains("processors=6"));
+        assert!(merged.contains("pageReporting=true"));
+        assert!(merged.contains("bestEffortDnsParsing=true"));
         assert!(merged.contains("memory=4096MB"));
         assert!(merged.contains("swap=4096MB"));
         assert!(merged.contains("networkingMode=mirrored"));
